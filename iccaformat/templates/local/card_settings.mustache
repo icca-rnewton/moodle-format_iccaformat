@@ -1,0 +1,284 @@
+{{!
+    Template: format_iccaformat/local/card_settings
+
+    Card settings form — image picker, description display, label/icon overrides.
+
+    Context: see section_settings.php $templatedata array.
+}}
+<div class="format-iccaformat-settings" style="max-width:720px;">
+<form method="post" enctype="multipart/form-data"
+      action="/course/format/iccaformat/section_settings.php">
+    <input type="hidden" name="sesskey"   value="{{sesskey}}">
+    <input type="hidden" name="courseid"  value="{{courseid}}">
+    <input type="hidden" name="sectionid" value="{{sectionid}}">
+    <input type="hidden" name="cmid"      value="{{cmid}}">
+    <input type="hidden" name="action"    value="save">
+
+    {{! ── Image ─────────────────────────────────────────────────────────── }}
+    <fieldset class="mb-4">
+        <legend class="h5 mb-3">{{#str}}cardsettings_image, format_iccaformat{{/str}}</legend>
+
+        {{! Current preview }}
+        {{#haspreview}}
+        <div class="mb-3">
+            <p class="text-muted small mb-1">{{#str}}cardsettings_currentimage, format_iccaformat{{/str}}</p>
+            <img src="{{previewurl}}" alt=""
+                 style="max-width:200px;max-height:120px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,0.1);">
+        </div>
+        {{/haspreview}}
+
+        {{! Source selector }}
+        <div class="mb-3">
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="radio" name="imagesource"
+                       id="source_none" value="none" {{#source_none}}checked{{/source_none}}>
+                <label class="form-check-label" for="source_none">
+                    {{#str}}card_image_source_none, format_iccaformat{{/str}}
+                </label>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="radio" name="imagesource"
+                       id="source_library" value="library" {{#source_library}}checked{{/source_library}}>
+                <label class="form-check-label" for="source_library">
+                    {{#str}}card_image_source_library, format_iccaformat{{/str}}
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="imagesource"
+                       id="source_upload" value="upload" {{#source_upload}}checked{{/source_upload}}>
+                <label class="form-check-label" for="source_upload">
+                    {{#str}}card_image_source_upload, format_iccaformat{{/str}}
+                </label>
+            </div>
+        </div>
+
+        {{! Library picker }}
+        <div id="library-picker" style="display:none;">
+            <p class="text-muted small mb-2">
+                {{#str}}cardsettings_pickfromlibrary, format_iccaformat{{/str}}
+            </p>
+
+            {{#hassiteimages}}
+            <p class="small fw-semibold mb-1">{{#str}}imagelibrary_scope_site, format_iccaformat{{/str}}</p>
+            <div class="format-iccaformat-imagepicker d-flex flex-wrap gap-2 mb-3">
+                {{#siteimages}}
+                <label class="format-iccaformat-imgthumb" title="{{name}}"
+                       style="cursor:pointer;position:relative;">
+                    <input type="radio" name="imageid" value="{{id}}"
+                           style="position:absolute;opacity:0;"
+                           {{#selected}}checked{{/selected}}>
+                    <img src="{{url}}" alt="{{name}}"
+                         style="width:90px;height:64px;object-fit:cover;border-radius:6px;
+                                border:2px solid transparent;transition:border-color 0.15s;"
+                         class="imgthumb-img">
+                    <span style="display:block;font-size:10px;text-align:center;
+                                 max-width:90px;overflow:hidden;text-overflow:ellipsis;
+                                 white-space:nowrap;color:#6c757d;">{{name}}</span>
+                </label>
+                {{/siteimages}}
+            </div>
+            {{/hassiteimages}}
+
+            {{#hascourseimages}}
+            <p class="small fw-semibold mb-1">{{#str}}imagelibrary_scope_course, format_iccaformat{{/str}}</p>
+            <div class="format-iccaformat-imagepicker d-flex flex-wrap gap-2 mb-3">
+                {{#courseimages}}
+                <label class="format-iccaformat-imgthumb" title="{{name}}"
+                       style="cursor:pointer;position:relative;">
+                    <input type="radio" name="imageid" value="{{id}}"
+                           style="position:absolute;opacity:0;"
+                           {{#selected}}checked{{/selected}}>
+                    <img src="{{url}}" alt="{{name}}"
+                         style="width:90px;height:64px;object-fit:cover;border-radius:6px;
+                                border:2px solid transparent;transition:border-color 0.15s;"
+                         class="imgthumb-img">
+                    <span style="display:block;font-size:10px;text-align:center;
+                                 max-width:90px;overflow:hidden;text-overflow:ellipsis;
+                                 white-space:nowrap;color:#6c757d;">{{name}}</span>
+                </label>
+                {{/courseimages}}
+            </div>
+            {{/hascourseimages}}
+
+            {{^hassiteimages}}{{^hascourseimages}}
+            <p class="text-muted small">{{#str}}imagelibrary_empty, format_iccaformat{{/str}}</p>
+            {{/hascourseimages}}{{/hassiteimages}}
+        </div>
+
+        {{! Upload panel }}
+        <div id="upload-panel" style="display:none;">
+            <div class="mb-2">
+                <label class="form-label small" for="imagefile">
+                    {{#str}}card_image_source_upload, format_iccaformat{{/str}}
+                </label>
+                <input type="file" class="form-control form-control-sm" id="imagefile"
+                       name="imagefile_upload"
+                       accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml">
+                <input type="hidden" name="imagedraft" id="imagedraft" value="{{draftitemid}}">
+                <div class="form-text text-muted">
+                    {{#str}}cardsettings_acceptedtypes, format_iccaformat{{/str}}
+                </div>
+            </div>
+
+            {{! Save to library option }}
+            <div class="card card-body bg-light border-0 mt-2 mb-1" style="max-width:420px;">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="savetolibrary"
+                           name="savetolibrary" value="1">
+                    <label class="form-check-label small" for="savetolibrary">
+                        {{#str}}cardsettings_savetolibrary, format_iccaformat{{/str}}
+                    </label>
+                </div>
+                <div id="library-save-options" style="display:none;">
+                    <div class="mb-2">
+                        <label class="form-label small" for="libname">
+                            {{#str}}imagelibrary_name, format_iccaformat{{/str}}
+                        </label>
+                        <input type="text" class="form-control form-control-sm"
+                               id="libname" name="libname" value="{{elementname}}">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small" for="libdesc">
+                            {{#str}}imagelibrary_description, format_iccaformat{{/str}}
+                        </label>
+                        <input type="text" class="form-control form-control-sm"
+                               id="libdesc" name="libdesc">
+                    </div>
+                    <div>
+                        <label class="form-label small">{{#str}}imagelibrary_scope, format_iccaformat{{/str}}</label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="libscope"
+                                   id="scope_course" value="course" checked>
+                            <label class="form-check-label small" for="scope_course">
+                                {{#str}}imagelibrary_scope_course, format_iccaformat{{/str}}
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="libscope"
+                                   id="scope_site" value="site">
+                            <label class="form-check-label small" for="scope_site">
+                                {{#str}}imagelibrary_scope_site, format_iccaformat{{/str}}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </fieldset>
+
+    {{! ── Description display ───────────────────────────────────────────── }}
+    <fieldset class="mb-4">
+        <legend class="h5 mb-3">{{#str}}card_description_display, format_iccaformat{{/str}}</legend>
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="radio" name="description_display"
+                   id="desc_hidden" value="hidden" {{#desc_hidden}}checked{{/desc_hidden}}>
+            <label class="form-check-label" for="desc_hidden">
+                {{#str}}descriptiondisplay_hidden, format_iccaformat{{/str}}
+            </label>
+        </div>
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="radio" name="description_display"
+                   id="desc_inbox" value="inbox" {{#desc_inbox}}checked{{/desc_inbox}}>
+            <label class="form-check-label" for="desc_inbox">
+                {{#str}}descriptiondisplay_inbox, format_iccaformat{{/str}}
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="description_display"
+                   id="desc_belowbox" value="belowbox" {{#desc_belowbox}}checked{{/desc_belowbox}}>
+            <label class="form-check-label" for="desc_belowbox">
+                {{#str}}descriptiondisplay_belowbox, format_iccaformat{{/str}}
+            </label>
+        </div>
+    </fieldset>
+
+    {{! ── Label and icon (activities only) ──────────────────────────────── }}
+    {{#iscm}}
+    <fieldset class="mb-4">
+        <legend class="h5 mb-3">{{#str}}labelrules, format_iccaformat{{/str}}</legend>
+        <div class="form-text text-muted mb-3">{{#str}}cardsettings_labelhelp, format_iccaformat{{/str}}</div>
+
+        <div class="mb-3" style="max-width:360px;">
+            <label class="form-label" for="label_override">
+                {{#str}}card_label_override, format_iccaformat{{/str}}
+            </label>
+            <input type="text" class="form-control" id="label_override"
+                   name="label_override" value="{{currentlabel}}">
+            <div class="form-text text-muted">{{#str}}card_label_override_help, format_iccaformat{{/str}}</div>
+        </div>
+
+        <div class="mb-3" style="max-width:360px;">
+            <label class="form-label" for="icon_override">
+                {{#str}}card_icon_override, format_iccaformat{{/str}}
+            </label>
+            <input type="text" class="form-control" id="icon_override"
+                   name="icon_override" value="{{currenticon}}"
+                   placeholder="e.g. fa-question-circle">
+        </div>
+
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="icon_enabled"
+                   name="icon_enabled" value="1" {{#icon_enabled}}checked{{/icon_enabled}}>
+            <label class="form-check-label" for="icon_enabled">
+                {{#str}}card_icon_enabled, format_iccaformat{{/str}}
+            </label>
+        </div>
+    </fieldset>
+    {{/iscm}}
+
+    {{! ── Actions ────────────────────────────────────────────────────────── }}
+    <div class="d-flex gap-2 mt-2">
+        <button type="submit" class="btn btn-primary">
+            {{#str}}savechanges{{/str}}
+        </button>
+        <a href="{{returnurl}}" class="btn btn-secondary">
+            {{#str}}cancel{{/str}}
+        </a>
+    </div>
+</form>
+</div>
+
+<script>
+window.addEventListener('load', function() {
+    // Show/hide image source panels.
+    var radios = document.querySelectorAll('input[name="imagesource"]');
+    var libraryPicker = document.getElementById('library-picker');
+    var uploadPanel   = document.getElementById('upload-panel');
+
+    function updatePanels() {
+        var val = document.querySelector('input[name="imagesource"]:checked');
+        if (!val) return;
+        libraryPicker.style.display = (val.value === 'library') ? '' : 'none';
+        uploadPanel.style.display   = (val.value === 'upload')  ? '' : 'none';
+    }
+
+    radios.forEach(function(r) { r.addEventListener('change', updatePanels); });
+    updatePanels();
+
+    // Highlight selected library image.
+    document.querySelectorAll('input[name="imageid"]').forEach(function(radio) {
+        var img = radio.closest('label').querySelector('.imgthumb-img');
+        if (radio.checked) img.style.borderColor = '#0d6efd';
+        radio.addEventListener('change', function() {
+            document.querySelectorAll('.imgthumb-img').forEach(function(i) {
+                i.style.borderColor = 'transparent';
+            });
+            img.style.borderColor = '#0d6efd';
+        });
+    });
+
+    // Show/hide save-to-library options.
+    var saveToLib = document.getElementById('savetolibrary');
+    var libOpts   = document.getElementById('library-save-options');
+    if (saveToLib) {
+        saveToLib.addEventListener('change', function() {
+            libOpts.style.display = this.checked ? '' : 'none';
+        });
+    }
+
+    // Handle file upload → set draft item id via fetch to Moodle draft API.
+    // For simplicity we use a standard file input; Moodle will process the
+    // draft on save via the draftitemid hidden field.
+    // Full AMD-based file manager can be added in a later iteration.
+});
+</script>

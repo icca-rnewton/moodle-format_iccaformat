@@ -1,0 +1,200 @@
+{{!
+    Template: format_iccaformat/local/content/section_interior
+    Section interior — interleaved activity and subsection cards.
+}}
+{{{hovercss}}}
+<style>
+.icca-nav-btn:focus, .icca-nav-btn:focus-visible,
+.icca-nav-link:focus, .icca-nav-link:focus-visible,
+.icca-map-card:focus, .icca-map-card:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+.icca-nav-btn:active { background: rgba(0,0,0,0.08) !important; }
+</style>
+<script>
+function iccaToggleMap(btn, mapId) {
+    var map  = document.getElementById(mapId);
+    if (!map) return;
+    var chev = btn.querySelector('.icca-map-chev');
+    var open = map.style.display !== 'none';
+    map.style.display = open ? 'none' : 'block';
+    if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+    if (!open) iccaPositionCaret();
+}
+function iccaPositionCaret() {
+    var caret   = document.getElementById('icca-map-caret');
+    var current = document.querySelector('.icca-map-current');
+    if (!caret || !current) return;
+    var cardWidth = 160;
+    var gap       = 8;
+    var cards     = current.parentElement.parentElement.querySelectorAll('.icca-map-card');
+    var idx       = Array.from(cards).indexOf(current);
+    if (idx < 0) return;
+    var offset = (idx * (cardWidth + gap)) + Math.round(cardWidth / 2) - 6;
+    caret.style.paddingLeft = offset + 'px';
+    caret.style.textAlign   = 'left';
+}
+</script>
+{{! Base card shadow — always applied regardless of hover style }}
+<style>.format-iccaformat-card-wrap{box-shadow:0 1px 4px rgba(0,0,0,0.07);}</style>
+{{#hover_lift}}
+<style>.format-iccaformat-card-wrap{box-shadow:0 1px 4px rgba(0,0,0,0.07);transition:transform 0.18s ease,box-shadow 0.18s ease;}.format-iccaformat-card-wrap:hover{transform:translateY(-4px);box-shadow:0 8px 20px rgba(0,0,0,0.13);}.format-iccaformat-card-wrap:active{transform:translateY(0);box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+.icca-map-card > div{transition:transform 0.18s ease,box-shadow 0.18s ease;}.icca-map-card:hover > div{transform:translateY(-2px);box-shadow:0 5px 12px rgba(0,0,0,0.13);}.icca-map-card:active > div{transform:translateY(0);box-shadow:none;}
+</style>
+{{/hover_lift}}
+{{#hover_imgzoom}}
+<style>.format-iccaformat-card-wrap .format-iccaformat-card-image img{transition:transform 0.3s ease;}.format-iccaformat-card:hover .format-iccaformat-card-image img{transform:scale(calc({{hoverzoom}} / 100));}.format-iccaformat-card-wrap{box-shadow:0 1px 4px rgba(0,0,0,0.07);transition:transform 0.1s ease;}.format-iccaformat-card-wrap:hover{transform:scale(1.01);}.format-iccaformat-card-wrap:active{transform:scale(1.00);}
+.icca-map-card > div{transition:transform 0.1s ease;}.icca-map-card:hover > div{transform:scale(1.02);}.icca-map-card:active > div{transform:scale(1.00);}
+</style>
+{{/hover_imgzoom}}
+{{#hover_shadow}}
+<style>.format-iccaformat-card-wrap{box-shadow:0 1px 4px rgba(0,0,0,0.07);transition:box-shadow 0.2s ease;}.format-iccaformat-card-wrap:hover{box-shadow:0 0 0 3px {{hovercolour}},0 6px 20px rgba(0,0,0,0.18);}.format-iccaformat-card-wrap:active{box-shadow:0 0 0 2px {{hovercolour}},0 2px 6px rgba(0,0,0,0.1);}
+.icca-map-card > div{transition:box-shadow 0.2s ease;}.icca-map-card:hover > div{box-shadow:0 0 0 2px {{hovercolour}},0 3px 10px rgba(0,0,0,0.1);}.icca-map-card:active > div{box-shadow:0 0 0 1px {{hovercolour}};}
+</style>
+{{/hover_shadow}}
+<div class="format-iccaformat format-iccaformat-interior" data-courseid="{{courseid}}">
+
+    {{#editingon}}
+    <div class="alert alert-info mb-3">{{#str}}editingmode, format_iccaformat{{/str}}</div>
+    {{/editingon}}
+
+    {{#showstrip}}
+    <div style="background:#fff;border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid rgba(0,0,0,0.1);">
+
+        {{! ── Single row: nav buttons left, progress bar right ── }}
+        <div style="display:flex;align-items:center;gap:10px;">
+
+            {{! Buttons always left }}
+            {{#shownavbuttons}}
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                {{#showhomebutton}}
+                <a href="{{courseurl}}" style="display:inline-flex;align-items:center;gap:5px;font-size:1rem;padding:3px 10px;border-radius:20px;border:0.5px solid rgba(0,0,0,0.2);color:#6c757d;text-decoration:none;transition:background 0.15s;outline:none;white-space:nowrap;" onmouseover="this.style.background='rgba(0,0,0,0.04)'" onmouseout="this.style.background='transparent'" class="icca-nav-btn">
+                    <i class="fa fa-home" style="font-size:13px;" aria-hidden="true"></i>
+                    {{#str}}homebutton_label, format_iccaformat{{/str}}
+                </a>
+                {{/showhomebutton}}
+                {{#showcoursemap}}{{#hascoursemapitems}}
+                <button type="button" onclick="iccaToggleMap(this,'icca-course-map')"
+                    style="display:inline-flex;align-items:center;gap:5px;font-size:1rem;padding:3px 10px;border-radius:20px;border:0.5px solid rgba(0,0,0,0.2);background:transparent;color:#6c757d;cursor:pointer;user-select:none;transition:background 0.15s;outline:none;white-space:nowrap;" class="icca-nav-btn" onmouseover="this.style.background='rgba(0,0,0,0.04)'" onmouseout="this.style.background='transparent'">
+                    <i class="fa fa-map-o" aria-hidden="true"></i>
+                    {{#str}}showcoursemap, format_iccaformat{{/str}}
+                    <i class="fa fa-chevron-down icca-map-chev" style="font-size:0.55rem;transition:transform 0.2s;" aria-hidden="true"></i>
+                </button>
+                {{/hascoursemapitems}}{{/showcoursemap}}
+            </div>
+            {{/shownavbuttons}}
+
+            {{! Progress bar fills remaining space }}
+            {{#sectionprogress}}
+            <div style="flex:1;min-width:0;">
+                {{#sectionhasactivities}}
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:1rem;color:#6c757d;margin-bottom:0.3rem;">
+                    <span>{{#str}}sectionprogress_label, format_iccaformat{{/str}}</span>
+                    <span>{{sectionprogresslabel}}</span>
+                </div>
+                <div style="height:6px;border-radius:3px;background:rgba(0,0,0,0.1);overflow:hidden;">
+                    <div style="height:100%;width:{{sectionprogresspercent}}%;background:{{completioncolour}};border-radius:3px;transition:width 0.3s ease;"></div>
+                </div>
+                {{/sectionhasactivities}}
+                {{#sectionnotracking}}
+                <div style="font-size:1rem;color:#adb5bd;">{{sectionnotrackingstr}}</div>
+                {{/sectionnotracking}}
+            </div>
+            {{/sectionprogress}}
+
+        </div>
+
+        {{#showcoursemap}}{{#hascoursemapitems}}
+        <div class="icca-course-map" id="icca-course-map" style="display:none;margin-top:10px;padding-top:10px;border-top:0.5px solid rgba(0,0,0,0.08);">
+
+            {{! Top-level sections — current/parent highlighted, others faded }}
+            <div style="display:flex;gap:8px;overflow-x:auto;padding:4px 4px 4px 4px;margin-bottom:{{#hasothersections}}4px{{/hasothersections}}{{^hasothersections}}0{{/hasothersections}};">
+                {{#coursemapitems}}
+                <a href="{{url}}" style="text-decoration:none;color:inherit;flex-shrink:0;outline:none;opacity:{{#iscurrent}}1{{/iscurrent}}{{^iscurrent}}0.35{{/iscurrent}};transition:opacity 0.2s;" class="icca-map-card{{#iscurrent}} icca-map-current{{/iscurrent}}"
+                   onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='{{#iscurrent}}1{{/iscurrent}}{{^iscurrent}}0.35{{/iscurrent}}'">
+                    <div style="width:160px;border-radius:8px;border:{{#iscurrent}}2px solid #0d3c6f{{/iscurrent}}{{^iscurrent}}0.5px solid rgba(0,0,0,0.1){{/iscurrent}};overflow:hidden;">
+                        <div style="height:65px;background:{{bgcolour}};display:flex;align-items:flex-end;padding:5px 7px;">
+                            <span style="font-size:0.85rem;font-weight:500;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{{name}}</span>
+                        </div>
+                        <div style="padding:5px 7px;background:#fff;min-height:38px;display:flex;flex-direction:column;justify-content:center;">
+                            {{#hastracking}}
+                            <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#6c757d;margin-bottom:2px;">
+                                <span>{{#str}}completionprogress, format_iccaformat{{/str}}</span>
+                                <span>{{label}}</span>
+                            </div>
+                            <div style="height:3px;border-radius:2px;background:rgba(0,0,0,0.08);overflow:hidden;">
+                                <div style="height:100%;width:{{percent}}%;background:{{completioncolour}};border-radius:2px;"></div>
+                            </div>
+                            {{/hastracking}}
+                            {{^hastracking}}
+                            <div style="font-size:0.85rem;color:#6c757d;">{{notrackingstr}}</div>
+                            {{/hastracking}}
+                        </div>
+                    </div>
+                </a>
+                {{/coursemapitems}}
+            </div>
+
+            {{! Caret + subsections }}
+            {{#hasothersections}}
+            <div id="icca-map-caret" style="color:#adb5bd;font-size:14px;line-height:1;padding:2px 0 4px;transition:padding-left 0.2s;">
+                <i class="fa fa-caret-down" aria-hidden="true"></i>
+            </div>
+            <div style="display:flex;gap:8px;overflow-x:auto;padding:4px 4px 4px 4px;">
+                {{#othersections}}
+                <a href="{{url}}" style="text-decoration:none;color:inherit;flex-shrink:0;outline:none;opacity:{{#iscurrent}}1{{/iscurrent}}{{^iscurrent}}0.35{{/iscurrent}};transition:opacity 0.2s;" class="icca-map-card{{#iscurrent}} icca-map-current{{/iscurrent}}"
+                   onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='{{#iscurrent}}1{{/iscurrent}}{{^iscurrent}}0.35{{/iscurrent}}'">
+                    <div style="width:160px;border-radius:8px;border:{{#iscurrent}}2px solid #0d3c6f{{/iscurrent}}{{^iscurrent}}0.5px solid rgba(0,0,0,0.1){{/iscurrent}};overflow:hidden;">
+                        <div style="height:65px;background:{{bgcolour}};display:flex;align-items:flex-end;padding:5px 7px;">
+                            <span style="font-size:0.85rem;font-weight:500;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{{name}}</span>
+                        </div>
+                        <div style="padding:5px 7px;background:#fff;min-height:38px;display:flex;flex-direction:column;justify-content:center;">
+                            {{#hastracking}}
+                            <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#6c757d;margin-bottom:2px;">
+                                <span>{{#str}}completionprogress, format_iccaformat{{/str}}</span>
+                                <span>{{label}}</span>
+                            </div>
+                            <div style="height:3px;border-radius:2px;background:rgba(0,0,0,0.08);overflow:hidden;">
+                                <div style="height:100%;width:{{percent}}%;background:{{completioncolour}};border-radius:2px;"></div>
+                            </div>
+                            {{/hastracking}}
+                            {{^hastracking}}
+                            <div style="font-size:0.85rem;color:#6c757d;">{{notrackingstr}}</div>
+                            {{/hastracking}}
+                        </div>
+                    </div>
+                </a>
+                {{/othersections}}
+            </div>
+            {{/hasothersections}}
+
+        </div>
+        {{/hascoursemapitems}}{{/showcoursemap}}
+    </div>
+    {{/showstrip}}
+
+    {{#hasitemcards}}
+    <div class="format-iccaformat-grid" style="
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax({{gridmin}}, {{gridmax}}));
+        gap: 1.25rem;
+        padding: 0.5rem 0 1.5rem;
+    ">
+        {{#itemcards}}
+        {{#issubsection}}{{> format_iccaformat/local/content/subsection_card }}{{/issubsection}}
+        {{#isactivity}}{{> format_iccaformat/local/content/activity_card }}{{/isactivity}}
+        {{#islabel}}
+        <div style="grid-column:1/-1;padding:0.5rem 0.25rem;font-size:1rem;color:#495057;line-height:1.6;">
+            {{{labelhtml}}}
+        </div>
+        {{/islabel}}
+        {{/itemcards}}
+    </div>
+    {{/hasitemcards}}
+
+    {{^hasitemcards}}
+    <div class="text-muted p-4">{{#str}}noactivities, format_iccaformat{{/str}}</div>
+    {{/hasitemcards}}
+
+</div>

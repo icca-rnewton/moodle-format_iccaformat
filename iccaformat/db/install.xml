@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="course/format/iccaformat/db" VERSION="20260520" COMMENT="XMLDB file for format_iccaformat"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+
+    <!--
+      iccaformat_image_library
+      Site-wide (and optionally course-scoped) image repository.
+      contextid = 1 (system context) for site-wide images.
+      contextid = course context id for course-specific images.
+      Files stored in Moodle file API:
+        component = format_iccaformat
+        filearea  = library_image
+        contextid = this record's contextid
+        itemid    = this record's id
+    -->
+    <TABLE NAME="iccaformat_image_library" COMMENT="Site-wide and course-level image library for format_iccaformat cards.">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="contextid"   TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"
+               COMMENT="System context (1) for site-wide images; course context id for course-scoped images."/>
+        <FIELD NAME="name"        TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"
+               COMMENT="Human-readable display name shown in the image picker."/>
+        <FIELD NAME="description" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="filename"    TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"
+               COMMENT="Stored filename in the Moodle file API (component=format_iccaformat, filearea=library_image)."/>
+        <FIELD NAME="userid"      TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"
+               COMMENT="User who uploaded the image."/>
+        <FIELD NAME="timecreated" TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"      TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_contextid" TYPE="foreign" FIELDS="contextid" REFTABLE="context" REFFIELDS="id"/>
+        <KEY NAME="fk_userid"    TYPE="foreign" FIELDS="userid"    REFTABLE="user"    REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="contextid" UNIQUE="false" FIELDS="contextid"
+               COMMENT="Fast lookup of all images available in a given context (site-wide or course)."/>
+      </INDEXES>
+    </TABLE>
+
+    <!--
+      iccaformat_element_options
+      Per-element key-value store. One row per option per element.
+      elementtype: 1 = top-level section, 2 = subsection (delegated), 3 = course module (cm).
+      elementid:   section.id for types 1/2; course_modules.id for type 3.
+
+      Known optionname values:
+        imagesource        — 'library' or 'upload'
+        imageid            — int: iccaformat_image_library.id  (when imagesource=library)
+        description_display — 'inbox' | 'belowbox' | 'hidden'
+        label_override     — string (cm only): overrides course label rule and module name
+        icon_override      — string (cm only): FA class, e.g. 'fa-question-circle'
+        icon_enabled       — '1' or '0' (cm only): show/hide icon on this card
+
+      We deliberately avoid course_format_options for element-level data so that
+      per-element settings survive a format switch and back.
+    -->
+    <TABLE NAME="iccaformat_element_options" COMMENT="Per-element (section/subsection/cm) options for format_iccaformat.">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"  LENGTH="10"  NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="courseid"    TYPE="int"  LENGTH="10"  NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="elementtype" TYPE="int"  LENGTH="2"   NOTNULL="true" SEQUENCE="false"
+               COMMENT="1=section, 2=subsection, 3=course module"/>
+        <FIELD NAME="elementid"   TYPE="int"  LENGTH="10"  NOTNULL="true" SEQUENCE="false"
+               COMMENT="section.id for types 1 and 2; course_modules.id for type 3"/>
+        <FIELD NAME="optionname"  TYPE="char" LENGTH="64"  NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="optionvalue" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10"  NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"   TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_course" TYPE="foreign" FIELDS="courseid" REFTABLE="course" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <!--
+          Primary lookup: fetch ALL options for a course in one query (keyed by elementid+optionname in PHP).
+          This is the performance-critical index — never loop and query per element.
+        -->
+        <INDEX NAME="courseid-elementtype"              UNIQUE="false" FIELDS="courseid, elementtype"/>
+        <!--
+          Unique constraint: only one value per option per element per course.
+          Prevents duplicates on upsert and lets get_record() be used safely.
+        -->
+        <INDEX NAME="courseid-elementid-optionname"     UNIQUE="true"  FIELDS="courseid, elementid, optionname"/>
+      </INDEXES>
+    </TABLE>
+
+    <!--
+      iccaformat_label_rules
+      Course-level modtype → label/icon/default-image mapping.
+      One row per modname per course.
+      libraryimageid is nullable — NULL means no default image for this rule,
+      fall through to placeholder.
+    -->
+    <TABLE NAME="iccaformat_label_rules" COMMENT="Course-level activity type label, icon, and default image rules for format_iccaformat.">
+      <FIELDS>
+        <FIELD NAME="id"             TYPE="int"    LENGTH="10"  NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="courseid"       TYPE="int"    LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+        <FIELD NAME="modname"        TYPE="char"   LENGTH="64"  NOTNULL="true"  SEQUENCE="false"
+               COMMENT="Moodle module name, e.g. quiz, scorm, book, page, url"/>
+        <FIELD NAME="label"          TYPE="char"   LENGTH="100" NOTNULL="false" SEQUENCE="false"
+               COMMENT="Custom label string, e.g. Activity. NULL = use Moodle modfullname."/>
+        <FIELD NAME="icon"           TYPE="char"   LENGTH="100" NOTNULL="false" SEQUENCE="false"
+               COMMENT="Font Awesome class string, e.g. fa-question-circle. NULL = no icon."/>
+        <FIELD NAME="label_enabled"  TYPE="int"    LENGTH="1"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false"
+               COMMENT="1 = show label on card, 0 = hidden."/>
+        <FIELD NAME="icon_enabled"   TYPE="int"    LENGTH="1"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false"
+               COMMENT="1 = show icon alongside label, 0 = label only."/>
+        <FIELD NAME="libraryimageid" TYPE="int"    LENGTH="10"  NOTNULL="false" SEQUENCE="false"
+               COMMENT="Default library image for this modtype in this course. NULL = no image default."/>
+        <FIELD NAME="timemodified"   TYPE="int"    LENGTH="10"  NOTNULL="true"  SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"            TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_course"          TYPE="foreign" FIELDS="courseid"       REFTABLE="course"                    REFFIELDS="id"/>
+        <KEY NAME="fk_libraryimageid"  TYPE="foreign" FIELDS="libraryimageid" REFTABLE="iccaformat_image_library"  REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <!--
+          Fetch all label rules for a course in one query on page load.
+        -->
+        <INDEX NAME="courseid"              UNIQUE="false" FIELDS="courseid"/>
+        <!--
+          One rule per modname per course.
+        -->
+        <INDEX NAME="courseid-modname"      UNIQUE="true"  FIELDS="courseid, modname"/>
+      </INDEXES>
+    </TABLE>
+
+  </TABLES>
+</XMLDB>

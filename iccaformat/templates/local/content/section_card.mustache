@@ -1,0 +1,122 @@
+{{!
+    Template: format_iccaformat/local/content/section_card
+}}
+<div class="format-iccaformat-card-wrap" style="display:flex;flex-direction:column;border-radius:{{borderradius}}px;border:1px solid rgba(0,0,0,0.1);background:#fff;min-height:248px;">
+
+<a href="{{url}}"
+   class="format-iccaformat-card format-iccaformat-section-card {{#hidden}}dimmed{{/hidden}}"
+   style="display:flex;flex-direction:column;flex:1;width:100%;min-height:0;text-decoration:none;color:inherit;background:transparent;">
+
+    <div class="format-iccaformat-card-image" style="width:100%;flex:1;background:{{imagebgcolour}};overflow:hidden;position:relative;border-radius:{{#showfooter}}{{borderradius}}px {{borderradius}}px 0 0{{/showfooter}}{{^showfooter}}{{borderradius}}px{{/showfooter}};">
+        {{#hasimage}}
+        <img src="{{imageurl}}" alt="" role="presentation"
+             style="position:absolute;inset:0;width:100%;height:100%;object-fit:{{imageobjectfit}};object-position:{{imageobjectposition}};filter:{{imagefilter}};display:block;">
+        {{/hasimage}}
+        {{#hasoverlay}}
+        <div style="position:absolute;inset:0;background:{{imageoverlay}};pointer-events:none;"></div>
+        {{/hasoverlay}}
+        <div class="{{scrimclass}}" style="position:absolute;bottom:0;left:0;right:0;padding:1.5rem 0.85rem 0.65rem;background:linear-gradient(to top,rgba(0,0,0,0.72) 0%,transparent 100%);transition:padding 0.3s ease;">
+            <h5 style="margin:0;font-size:1.25rem;font-weight:600;line-height:1.3;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.4);">{{name}}</h5>
+            {{#hasdescription}}
+            <div class="icca-hover-desc" style="max-height:0;overflow:hidden;opacity:0;transition:max-height 0.35s ease,opacity 0.3s ease;font-size:{{descfontsize}}rem;color:rgba(255,255,255,0.88);line-height:1.45;margin-top:0;">
+                {{{description}}}
+            </div>
+            {{/hasdescription}}
+        </div>
+        {{#haslabel}}
+        <span style="position:absolute;top:0.5rem;left:0.5rem;background:rgba(0,0,0,0.55);color:#fff;font-size:15px;font-weight:500;padding:3px 10px;border-radius:4px;display:inline-flex;align-items:center;gap:5px;">
+            {{^flipped}}
+            {{#showsectionicon}}
+                {{#sectioniconclass}}<i class="{{sectioniconclass}}" aria-hidden="true"></i>{{/sectioniconclass}}
+                {{#sectionicontext}}{{sectionicontext}}{{/sectionicontext}}
+            {{/showsectionicon}}
+            {{/flipped}}
+            {{namelabel}}
+            {{#flipped}}
+            {{#showsectionicon}}
+                {{#sectioniconclass}}<i class="{{sectioniconclass}}" aria-hidden="true"></i>{{/sectioniconclass}}
+                {{#sectionicontext}}{{sectionicontext}}{{/sectionicontext}}
+            {{/showsectionicon}}
+            {{/flipped}}
+        </span>
+        {{/haslabel}}
+        {{^haslabel}}
+        {{#showsectionicon}}
+        <span style="position:absolute;top:0.5rem;left:0.5rem;background:rgba(0,0,0,0.55);color:#fff;font-size:15px;font-weight:600;padding:3px 10px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;min-width:32px;min-height:27px;justify-content:center;">
+            {{#sectioniconclass}}<i class="{{sectioniconclass}}" aria-hidden="true"></i>{{/sectioniconclass}}
+            {{#sectionicontext}}{{sectionicontext}}{{/sectionicontext}}
+        </span>
+        {{/showsectionicon}}
+        {{/haslabel}}
+        {{#restricted}}
+        <span style="position:absolute;top:0.5rem;right:0.5rem;background:rgba(0,0,0,0.6);color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;border-radius:4px;">
+            <i class="fa fa-lock" aria-hidden="true"></i>
+            {{#str}}card_restricted, format_iccaformat{{/str}}
+        </span>
+        {{/restricted}}
+    </div>
+
+</a>
+
+{{! Footer — only rendered when progress bar or no-tracking message is shown }}
+{{#showfooter}}
+<div style="padding:9px 1rem 12px;background:#fff;border-radius:0 0 {{borderradius}}px {{borderradius}}px;">
+    {{#showcompletionbar}}
+    {{#hassubsections}}
+    <div onclick="(function(el){var b=el.parentElement.querySelector('.icca-sub-breakdown');var i=el.querySelector('.icca-chevron');var open=b.style.maxHeight!=='0px'&&b.style.maxHeight!=='';b.style.maxHeight=open?'0px':'200px';i.style.transform=open?'':'rotate(180deg)';})(this)"
+         style="display:flex;justify-content:space-between;font-size:{{footerfontsize}};color:#6c757d;cursor:pointer;user-select:none;">
+        <span>{{#str}}completionprogress, format_iccaformat{{/str}}</span>
+        <span>{{completionlabel}} <i class="fa fa-chevron-down icca-chevron" style="font-size:0.6rem;margin-left:3px;transition:transform 0.2s;display:inline-block;" aria-hidden="true"></i></span>
+    </div>
+    {{/hassubsections}}
+    {{^hassubsections}}
+    <div style="display:flex;justify-content:space-between;font-size:{{footerfontsize}};color:#6c757d;">
+        <span>{{#str}}completionprogress, format_iccaformat{{/str}}</span>
+        <span>{{completionlabel}}</span>
+    </div>
+    {{/hassubsections}}
+    <div style="height:6px;border-radius:3px;background:rgba(0,0,0,0.1);overflow:hidden;">
+        <div style="height:100%;width:{{completionpercent}}%;background:{{completioncolour}};border-radius:3px;transition:width 0.3s ease;"></div>
+    </div>
+    {{/showcompletionbar}}
+
+    {{#shownotracking}}
+    {{#hassubsections}}
+    <div onclick="(function(el){var b=el.parentElement.querySelector('.icca-sub-breakdown');var i=el.querySelector('.icca-chevron');var open=b.style.maxHeight!=='0px'&&b.style.maxHeight!=='';b.style.maxHeight=open?'0px':'200px';i.style.transform=open?'':'rotate(180deg)';})(this)"
+         style="display:flex;justify-content:space-between;font-size:{{footerfontsize}};color:#adb5bd;cursor:pointer;user-select:none;">
+        <span>{{notrackingstr}}</span>
+        <span><i class="fa fa-chevron-down icca-chevron" style="font-size:0.6rem;margin-left:3px;transition:transform 0.2s;display:inline-block;" aria-hidden="true"></i></span>
+    </div>
+    {{/hassubsections}}
+    {{^hassubsections}}
+    <div style="font-size:{{footerfontsize}};color:#adb5bd;">
+        {{notrackingstr}}
+    </div>
+    {{/hassubsections}}
+    {{/shownotracking}}
+
+    {{! Subsection breakdown — shared by both tracked and untracked }}
+    {{#hassubsections}}
+    <div class="icca-sub-breakdown" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">
+        <div style="max-height:180px;overflow-y:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:#dee2e6 transparent;">
+        {{#subsectionbars}}
+        <a href="{{url}}" style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-top:0.5px solid rgba(0,0,0,0.07);margin-top:3px;text-decoration:none;color:inherit;border-radius:4px;transition:background 0.15s;outline:none;" class="icca-nav-link" onmouseover="this.style.background='rgba(0,0,0,0.04)'" onmouseout="this.style.background=''">
+            <span style="font-size:{{dropdownfontsize}};color:#6c757d;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">{{name}}</span>
+            {{#hastracking}}
+            <div style="flex:0.4;height:4px;background:rgba(0,0,0,0.08);border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:{{percent}}%;background:{{completioncolour}};border-radius:2px;"></div>
+            </div>
+            <span style="font-size:0.75rem;color:#adb5bd;min-width:24px;text-align:right;">{{label}}</span>
+            {{/hastracking}}
+            {{#notracking}}
+            <span style="font-size:{{dropdownfontsize}};color:#adb5bd;font-style:italic;white-space:nowrap;">{{notrackingstr}}</span>
+            {{/notracking}}
+        </a>
+        {{/subsectionbars}}
+        </div>
+    </div>
+    {{/hassubsections}}
+</div>
+{{/showfooter}}
+
+</div>
