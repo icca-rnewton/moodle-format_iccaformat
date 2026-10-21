@@ -15,10 +15,29 @@
         {{#hasoverlay}}
         <div style="position:absolute;inset:0;background:{{imageoverlay}};pointer-events:none;"></div>
         {{/hasoverlay}}
+        {{#hidden}}
+        <div style="position:absolute;top:0.5rem;right:0.5rem;z-index:2;">
+            <span style="background:rgba(0,0,0,0.6);color:#fff;font-size:15px;padding:3px 10px;border-radius:4px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+                <i class="fa fa-eye-slash" aria-hidden="true"></i>
+                {{#str}}card_hidden, format_iccaformat{{/str}}
+            </span>
+        </div>
+        {{/hidden}}
         {{#restricted}}
-        <span style="position:absolute;top:0.5rem;right:0.5rem;background:rgba(0,0,0,0.6);color:#fff;font-size:0.7rem;padding:0.2rem 0.5rem;border-radius:4px;">
-            <i class="fa fa-lock" aria-hidden="true"></i>
-        </span>
+        <div style="position:absolute;top:0.5rem;left:0.5rem;right:0.5rem;z-index:2;" onclick="event.preventDefault();event.stopPropagation();">
+            <button type="button"
+                onclick="iccaToggleRestriction(this)"
+                style="background:rgba(0,0,0,0.6);border:none;color:#fff;font-size:15px;padding:3px 10px;border-radius:4px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-family:inherit;float:right;">
+                <i class="fa fa-lock" aria-hidden="true"></i>
+                {{#str}}card_restricted, format_iccaformat{{/str}}
+                <i class="fa fa-chevron-down" aria-hidden="true" style="font-size:11px;"></i>
+            </button>
+            <div class="icca-restriction-panel" style="display:none;clear:both;margin-top:6px;background:rgba(0,0,0,0.82);border-radius:6px;padding:10px 12px;max-height:120px;overflow-y:auto;width:100%;box-sizing:border-box;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.3) transparent;">
+                <div style="font-size:15px;color:#fff;line-height:1.5;" class="icca-restriction-text">
+                    {{{restrictioninfo}}}
+                </div>
+            </div>
+        </div>
         {{/restricted}}
         {{#haslabel}}
         <span style="position:absolute;top:0.5rem;left:0.5rem;background:rgba(0,0,0,0.55);color:#fff;font-size:15px;font-weight:500;padding:3px 10px;border-radius:4px;display:inline-flex;align-items:center;gap:5px;">

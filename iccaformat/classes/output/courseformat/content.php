@@ -244,6 +244,7 @@ class content extends content_base {
         $context = \context_course::instance($course->id);
 
         $canviewhidden = has_capability('moodle/course:viewhiddensections', $context);
+        $canedit       = has_capability('moodle/course:update', $context);
 
         $formatoptions       = $format->get_format_options();
         $borderradius        = (int)    ($formatoptions['borderradius']        ?? 8);
@@ -546,6 +547,14 @@ class content extends content_base {
                             'label'            => $mdone . ' / ' . $mtotal,
                             'completioncolour' => $completioncolour,
                             'notrackingstr'    => $notrackingstr,
+                            'hidden'           => !$s->visible,
+                            'restricted'       => ($s->visible && !$s->available),
+                            'restrictedhidden' => ($s->visible && !$s->available && empty($s->availableinfo)),
+                            'canedit'          => $canedit,
+                            'staffhidden'      => (!$s->visible && $canedit),
+                            'studenthidden'    => (!$s->visible && !$canedit),
+                            'staffrestricted'  => ($s->visible && !$s->available && $canedit && empty($s->availableinfo)),
+                            'studentrestricted'=> ($s->visible && !$s->available && !$canedit && empty($s->availableinfo)),
                         ];
                     }
 
@@ -577,6 +586,14 @@ class content extends content_base {
                                 'label'            => $mdone . ' / ' . $mtotal,
                                 'completioncolour' => $completioncolour,
                                 'notrackingstr'    => $notrackingstr,
+                                'hidden'           => !$sub->visible,
+                                'restricted'       => ($sub->visible && !$sub->available),
+                                'restrictedhidden' => ($sub->visible && !$sub->available && empty($sub->availableinfo)),
+                                'canedit'          => $canedit,
+                                'staffhidden'      => (!$sub->visible && $canedit),
+                                'studenthidden'    => (!$sub->visible && !$canedit),
+                                'staffrestricted'  => ($sub->visible && !$sub->available && $canedit && empty($sub->availableinfo)),
+                                'studentrestricted'=> ($sub->visible && !$sub->available && !$canedit && empty($sub->availableinfo)),
                             ];
                             break;
                         }
@@ -625,6 +642,14 @@ class content extends content_base {
                         'label'            => $mdone . ' / ' . $mtotal,
                         'completioncolour' => $completioncolour,
                         'notrackingstr'    => $notrackingstr,
+                        'hidden'           => !$s->visible,
+                        'restricted'       => ($s->visible && !$s->available),
+                        'restrictedhidden' => ($s->visible && !$s->available && empty($s->availableinfo)),
+                        'canedit'          => $canedit,
+                        'staffhidden'      => (!$s->visible && $canedit),
+                        'studenthidden'    => (!$s->visible && !$canedit),
+                        'staffrestricted'  => ($s->visible && !$s->available && $canedit && empty($s->availableinfo)),
+                        'studentrestricted'=> ($s->visible && !$s->available && !$canedit && empty($s->availableinfo)),
                     ];
                 }
 
@@ -656,6 +681,14 @@ class content extends content_base {
                             'label'            => $mdone . ' / ' . $mtotal,
                             'completioncolour' => $completioncolour,
                             'notrackingstr'    => $notrackingstr,
+                            'hidden'           => !$sub->visible,
+                            'restricted'       => ($sub->visible && !$sub->available),
+                            'restrictedhidden' => ($sub->visible && !$sub->available && empty($sub->availableinfo)),
+                            'canedit'          => $canedit,
+                            'staffhidden'      => (!$sub->visible && $canedit),
+                            'studenthidden'    => (!$sub->visible && !$canedit),
+                            'staffrestricted'  => ($sub->visible && !$sub->available && $canedit && empty($sub->availableinfo)),
+                            'studentrestricted'=> ($sub->visible && !$sub->available && !$canedit && empty($sub->availableinfo)),
                         ];
                         break;
                     }
@@ -767,12 +800,21 @@ class content extends content_base {
         $this->apply_completion_bar($card, $showbar, $section, $modinfo,
             $completiondata, $completioncolour);
 
-        $card->restricted     = !$section->available && $section->visible;
-        $card->restrictioninfo = '';
+        $card->restricted       = (!$section->available && $section->visible)
+            || ($canedit && !empty($section->availability)); // Staff always see restrictions
+        $card->restrictedhidden = (!$section->available && $section->visible && empty($section->availableinfo));
+        $card->restrictioninfo  = '';
         if ($card->restricted) {
-            $card->restrictioninfo = $section->availableinfo
-                ? format_text($section->availableinfo, FORMAT_HTML)
-                : get_string('card_restricted', 'format_iccaformat');
+            if (!empty($section->availableinfo)) {
+                $card->restrictioninfo = \core_availability\info::format_info($section->availableinfo, $course);
+            } else {
+                // Fetch directly — either "hide content" is on, or staff viewing met conditions.
+                $secinfo  = new \core_availability\info_section($section);
+                $fullinfo = $secinfo->get_full_information();
+                if ($fullinfo) {
+                    $card->restrictioninfo = \core_availability\info::format_info($fullinfo, $course);
+                }
+            }
         }
 
         return $card;
@@ -852,12 +894,25 @@ class content extends content_base {
         $this->apply_activity_completion($card, $cm, $completiondata, $completioncolour, (bool) $showactivitybar);
 
         // --- Restrictions ----------------------------------------------------
-        $card->restricted     = !$cm->available;
-        $card->restrictioninfo = '';
-        if ($card->restricted && !$cm->availableinfo) {
-            $card->restrictioninfo = get_string('card_restricted', 'format_iccaformat');
-        } else if ($card->restricted) {
-            $card->restrictioninfo = format_text($cm->availableinfo, FORMAT_HTML);
+        $card->restricted          = !$cm->available
+            || ($canedit && !empty($cm->availability)); // Staff always see restrictions
+        $card->restrictedhidden    = (!$cm->available && empty($cm->availableinfo));
+        $card->restrictedbysection = false;
+        $card->restrictioninfo     = '';
+        if ($card->restricted) {
+            if (!empty($cm->availableinfo)) {
+                $card->restrictioninfo = \core_availability\info::format_info($cm->availableinfo, $course);
+            } else {
+                // Fetch directly — either "hide content" is on, or staff viewing met conditions.
+                $cminfo   = new \core_availability\info_module($cm);
+                $fullinfo = $cminfo->get_full_information();
+                if ($fullinfo) {
+                    $card->restrictioninfo = \core_availability\info::format_info($fullinfo, $course);
+                } else {
+                    // No conditions on this activity — restriction inherited from parent section.
+                    $card->restrictedbysection = true;
+                }
+            }
         }
 
         return $card;
@@ -989,9 +1044,25 @@ class content extends content_base {
             }
 
             // Restrictions.
-            $card->restricted     = !$delegatedsection->available && $delegatedsection->visible;
-            $card->restrictioninfo = $card->restricted
-                ? get_string('card_restricted', 'format_iccaformat') : '';
+            $card->restricted       = (!$delegatedsection->available && $delegatedsection->visible)
+                || ($canedit && !empty($delegatedsection->availability)); // Staff always see restrictions
+            $card->restrictedhidden = (!$delegatedsection->available && $delegatedsection->visible && empty($delegatedsection->availableinfo));
+            $card->restrictedbysection = false;
+            $card->hidden           = !$delegatedsection->visible;
+            $card->restrictioninfo  = '';
+            if ($card->restricted) {
+                if (!empty($delegatedsection->availableinfo)) {
+                    $card->restrictioninfo = \core_availability\info::format_info($delegatedsection->availableinfo, $course);
+                } else {
+                    $secinfo  = new \core_availability\info_section($delegatedsection);
+                    $fullinfo = $secinfo->get_full_information();
+                    if ($fullinfo) {
+                        $card->restrictioninfo = \core_availability\info::format_info($fullinfo, $course);
+                    } else {
+                        $card->restrictedbysection = true;
+                    }
+                }
+            }
         } else {
             // Fallback if delegated section not resolved.
             $card->name         = $cm->get_formatted_name();

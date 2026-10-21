@@ -70,6 +70,21 @@
     </div>
 
     <script>
+    </script>
+    <style>
+    .icca-restriction-text, .icca-restriction-text * { color: #fff !important; }
+    </style>
+    <script>
+    function iccaToggleRestriction(btn) {
+        var panel = btn.parentElement.querySelector('.icca-restriction-panel');
+        if (!panel) return;
+        var open = panel.style.display !== 'none';
+        panel.style.display = open ? 'none' : 'block';
+        var chev = btn.querySelector('.fa-chevron-down, .fa-chevron-up');
+        if (chev) {
+            chev.className = open ? 'fa fa-chevron-down' : 'fa fa-chevron-up';
+        }
+    }
     function iccaShowResetDialog() {
         ['icca-reset-all','icca-reset-icons','icca-reset-labels','icca-reset-images'].forEach(function(id){ document.getElementById(id).checked = false; });
         var btn = document.getElementById('icca-reset-confirm-btn');
