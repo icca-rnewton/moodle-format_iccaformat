@@ -93,11 +93,9 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             return;
         }
 
-        if ($DB->record_exists('iccaformat_element_options', [
-            'courseid'   => $courseid,
-            'elementid'  => $newsectionid,
-            'optionname' => $data->optionname,
-        ])) {
+        if ($DB->record_exists_select('iccaformat_element_options',
+                'courseid = ? AND elementid = ? AND optionname = ? AND elementtype IN (1, 2)',
+                [$courseid, $newsectionid, $data->optionname])) {
             return;
         }
 
@@ -111,7 +109,7 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             'optionname'  => $data->optionname,
             'optionvalue' => $data->optionvalue,
             'timecreated' => time(),
-            'timemodified'=> time(),
+            'timemodified' => time(),
         ]);
     }
 
@@ -138,10 +136,17 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
         // Register file mapping old cmid -> new cmid.
         $this->set_mapping('iccaformat_cm', $oldcmid, $newcmid, true);
 
+        // Backups made before activity uploads moved to cm_image have no cmfilearea
+        // marker — flag it so after_restore_course() also picks up the old file area.
+        if (empty($data->cmfilearea)) {
+            $this->set_mapping('iccaformat_legacycmfiles', 1, 1);
+        }
+
         if ($DB->record_exists('iccaformat_element_options', [
-            'courseid'   => $courseid,
-            'elementid'  => $newcmid,
-            'optionname' => $data->optionname,
+            'courseid'    => $courseid,
+            'elementtype' => 3,
+            'elementid'   => $newcmid,
+            'optionname'  => $data->optionname,
         ])) {
             return;
         }
@@ -153,7 +158,7 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             'optionname'  => $data->optionname,
             'optionvalue' => $data->optionvalue,
             'timecreated' => time(),
-            'timemodified'=> time(),
+            'timemodified' => time(),
         ]);
     }
 
@@ -212,7 +217,65 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
      * After course restore — restore CM and library image files.
      */
     public function after_restore_course() {
-        $this->add_related_files('format_iccaformat', 'element_image', 'iccaformat_cm');
+        $this->add_related_files('format_iccaformat', 'cm_image', 'iccaformat_cm');
+
+        // Older backups stored activity uploads in element_image alongside section
+        // uploads. Restore them there, then move them across with the same helper the
+        // upgrade step uses (ambiguous ids are left in place rather than guessed).
+        if ($this->get_mappingid('iccaformat_legacycmfiles', 1)) {
+            $this->add_related_files('format_iccaformat', 'element_image', 'iccaformat_cm');
+            \format_iccaformat\local\format_option::migrate_legacy_cm_files($this->get_courseid());
+        }
+
         $this->add_related_files('format_iccaformat', 'library_image', 'iccaformat_library_image');
+
+        $this->remap_library_image_references();
+    }
+
+    /**
+     * Point restored library-image references at the restored copies.
+     *
+     * Card Styling Rules (libraryimageid) and per-card overrides (imageid) are
+     * restored before the course's library images, so they still hold the
+     * backup's old image ids. Run once everything is in:
+     *   - an id the backup also contained is mapped to the restored copy;
+     *   - an id that exists on this site but wasn't in the backup (a site-wide
+     *     library image, or another course's) is left as it is;
+     *   - an id that doesn't exist on this site at all is cleared, so the card
+     *     falls back to its default instead of a broken image.
+     */
+    private function remap_library_image_references(): void {
+        global $DB;
+
+        $courseid = $this->get_courseid();
+        $resolve  = function (int $oldid) use ($DB): int {
+            if ($oldid <= 0) {
+                return 0;
+            }
+            $newid = (int) $this->get_mappingid('iccaformat_library_image', $oldid);
+            if ($newid) {
+                return $newid;
+            }
+            return $DB->record_exists('iccaformat_image_library', ['id' => $oldid]) ? $oldid : 0;
+        };
+
+        $rules = $DB->get_records_select('iccaformat_label_rules',
+            'courseid = ? AND libraryimageid > 0', [$courseid], '', 'id, libraryimageid');
+        foreach ($rules as $rule) {
+            $newid = $resolve((int) $rule->libraryimageid);
+            if ($newid !== (int) $rule->libraryimageid) {
+                $DB->set_field('iccaformat_label_rules', 'libraryimageid', $newid ?: null, ['id' => $rule->id]);
+            }
+        }
+
+        $options = $DB->get_records_select('iccaformat_element_options',
+            'courseid = ? AND optionname = ?', [$courseid, 'imageid'], '', 'id, optionvalue');
+        foreach ($options as $option) {
+            $oldid = (int) $option->optionvalue;
+            $newid = $resolve($oldid);
+            if ($newid !== $oldid) {
+                $DB->set_field('iccaformat_element_options', 'optionvalue', (string) $newid, ['id' => $option->id]);
+            }
+        }
     }
 }

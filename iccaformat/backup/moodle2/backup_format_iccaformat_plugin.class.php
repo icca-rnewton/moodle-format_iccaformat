@@ -53,10 +53,16 @@ class backup_format_iccaformat_plugin extends backup_format_plugin {
             'courseid', 'elementid', 'optionname', 'optionvalue',
         ]);
         $sectionwrapper->add_child($secoption);
-        $secoption->set_source_table('iccaformat_element_options', [
-            'courseid'  => backup::VAR_COURSEID,
-            'elementid' => backup::VAR_SECTIONID,
-        ]);
+        // Section/subsection rows only (elementtype 1 or 2) — a cm row can share the
+        // same numeric elementid, since section and cm ids are separate sequences.
+        $secoption->set_source_sql(
+            'SELECT eo.id, eo.courseid, eo.elementid, eo.optionname, eo.optionvalue
+               FROM {iccaformat_element_options} eo
+              WHERE eo.courseid = ?
+                AND eo.elementid = ?
+                AND eo.elementtype IN (1, 2)',
+            [backup::VAR_COURSEID, backup::VAR_SECTIONID]
+        );
 
         // Annotate section image files.
         $sectionwrapper->annotate_files('format_iccaformat', 'element_image', 'sectionid');
@@ -75,15 +81,18 @@ class backup_format_iccaformat_plugin extends backup_format_plugin {
 
         // ── CM element options ─────────────────────────────────────────────
         $cmoptions = new backup_nested_element('cmoptions');
+        // cmfilearea marks backups made after activity uploads moved to their own
+        // file area (cm_image). Restore uses its absence to detect older backups.
         $cmoption  = new backup_nested_element('cmoption', ['id'], [
-            'courseid', 'elementid', 'optionname', 'optionvalue',
+            'courseid', 'elementid', 'optionname', 'optionvalue', 'cmfilearea',
         ]);
         $cmoptions->add_child($cmoption);
         $plugin->add_child($cmoptions);
 
         // All CM element options for this course (elementtype=3).
         $cmoption->set_source_sql(
-            'SELECT eo.id, eo.courseid, eo.elementid, eo.optionname, eo.optionvalue
+            'SELECT eo.id, eo.courseid, eo.elementid, eo.optionname, eo.optionvalue,
+                    \'cm_image\' AS cmfilearea
                FROM {iccaformat_element_options} eo
               WHERE eo.courseid = :courseid
                 AND eo.elementtype = 3',
@@ -91,13 +100,13 @@ class backup_format_iccaformat_plugin extends backup_format_plugin {
         );
 
         // Annotate CM image files — itemid = cmid.
-        $cmoption->annotate_files('format_iccaformat', 'element_image', 'elementid');
+        $cmoption->annotate_files('format_iccaformat', 'cm_image', 'elementid');
 
         // ── Label rules ────────────────────────────────────────────────────
         $labelrules = new backup_nested_element('label_rules');
         $labelrule  = new backup_nested_element('label_rule', ['id'], [
             'courseid', 'modname', 'label', 'label_enabled',
-            'icon', 'icon_enabled', 'timemodified',
+            'icon', 'icon_enabled', 'flipped', 'image_hidden', 'libraryimageid', 'timemodified',
         ]);
         $labelrules->add_child($labelrule);
         $plugin->add_child($labelrules);

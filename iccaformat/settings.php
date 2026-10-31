@@ -163,6 +163,17 @@ if ($ADMIN->fulltree) {
     ));
 
     $settings->add(new admin_setting_configselect(
+        'format_iccaformat/default_coursemaplabels',
+        get_string('coursemaplabels', 'format_iccaformat'),
+        get_string('coursemaplabels_desc', 'format_iccaformat'),
+        '1',
+        [
+            '1' => get_string('coursemaplabels_show', 'format_iccaformat'),
+            '0' => get_string('coursemaplabels_hide', 'format_iccaformat'),
+        ]
+    ));
+
+    $settings->add(new admin_setting_configselect(
         'format_iccaformat/default_showhomebutton',
         get_string('showhomebutton', 'format_iccaformat'),
         '',
@@ -237,7 +248,7 @@ if ($ADMIN->fulltree) {
             'left'         => get_string('imageposition_left',         'format_iccaformat'),
             'right'        => get_string('imageposition_right',        'format_iccaformat'),
             'top center'   => 'Top center',
-            'bottom center'=> 'Bottom center',
+            'bottom center' => 'Bottom center',
         ]
     ));
 

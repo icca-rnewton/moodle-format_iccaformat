@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="course/format/iccaformat/db" VERSION="20260520" COMMENT="XMLDB file for format_iccaformat"
+<XMLDB PATH="course/format/iccaformat/db" VERSION="20261021" COMMENT="XMLDB file for format_iccaformat"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../../lib/xmldb/xmldb.xsd"
 >
@@ -83,9 +83,10 @@
         <INDEX NAME="courseid-elementtype"              UNIQUE="false" FIELDS="courseid, elementtype"/>
         <!--
           Unique constraint: only one value per option per element per course.
-          Prevents duplicates on upsert and lets get_record() be used safely.
+          elementtype is part of the key because section ids and cmids are separate
+          sequences — the same number can be both a section and an activity in one course.
         -->
-        <INDEX NAME="courseid-elementid-optionname"     UNIQUE="true"  FIELDS="courseid, elementid, optionname"/>
+        <INDEX NAME="uniq-element-option" UNIQUE="true"  FIELDS="courseid, elementtype, elementid, optionname"/>
       </INDEXES>
     </TABLE>
 
@@ -108,6 +109,10 @@
                COMMENT="Font Awesome class string, e.g. fa-question-circle. NULL = no icon."/>
         <FIELD NAME="label_enabled"  TYPE="int"    LENGTH="1"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false"
                COMMENT="1 = show label on card, 0 = hidden."/>
+        <FIELD NAME="flipped"        TYPE="int"    LENGTH="1"   NOTNULL="true"  DEFAULT="0" SEQUENCE="false"
+               COMMENT="1 = icon and label order swapped on the card."/>
+        <FIELD NAME="image_hidden"   TYPE="int"    LENGTH="1"   NOTNULL="true"  DEFAULT="0" SEQUENCE="false"
+               COMMENT="1 = suppress this rule's default image on cards."/>
         <FIELD NAME="icon_enabled"   TYPE="int"    LENGTH="1"   NOTNULL="true"  DEFAULT="1" SEQUENCE="false"
                COMMENT="1 = show icon alongside label, 0 = label only."/>
         <FIELD NAME="libraryimageid" TYPE="int"    LENGTH="10"  NOTNULL="false" SEQUENCE="false"

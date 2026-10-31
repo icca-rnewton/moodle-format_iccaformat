@@ -1,4 +1,26 @@
 <?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * English language strings for format_iccaformat.
+ *
+ * @package   format_iccaformat
+ * @copyright 2026 Inns of Court College of Advocacy (Part of COIC)
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'ICCA Format';
@@ -21,9 +43,6 @@ $string['completionbarshowin_subsections'] = 'Subsections only';
 $string['completionbarshowin_both']        = 'Sections and subsections';
 $string['completionbarshowin_help']        = 'Choose which card types display a completion progress bar.';
 $string['descriptiondisplay']          = 'Description display (default)';
-$string['descriptiondisplay_hidden']   = 'Hidden';
-$string['descriptiondisplay_inbox']    = 'Inside the card';
-$string['descriptiondisplay_belowbox'] = 'Below the card';
 $string['descriptiondisplay_help']     = 'Course-wide default for where to display descriptions. Can be overridden per item.';
 $string['error_borderradius']        = 'Border radius must be between 0 and 24.';
 $string['error_completionbarcolour'] = 'Please enter a valid hex colour code, e.g. #2d7fc1 or #fff.';
@@ -31,41 +50,29 @@ $string['imagelibrary']              = 'Image library';
 $string['imagelibrary_desc']         = 'Site-wide images available to all courses. Upload once, assign to any card.';
 $string['imagelibrary_add']          = 'Add image';
 $string['imagelibrary_name']         = 'Image name';
-$string['imagelibrary_description']  = 'Description (optional)';
 $string['imagelibrary_file']         = 'Image file';
-$string['imagelibrary_scope_site']   = 'Site-wide (all courses)';
-$string['imagelibrary_scope_course'] = 'This course only';
 $string['imagelibrary_updated']      = 'Image updated. All cards using this image will reflect the change.';
 $string['imagelibrary_deleted']      = 'Image removed from library.';
 $string['imagelibrary_inuse']        = 'This image is currently assigned to {$a} card(s).';
 $string['labelrules']              = 'Activity card default rules';
 $string['labelrules_desc']         = 'Set a custom label and icon for each activity type in this course.';
-$string['labelrules_modtype']      = 'Activity type';
-$string['labelrules_label']        = 'Label text';
-$string['labelrules_icon']         = 'Icon (Font Awesome class)';
-$string['labelrules_icon_enabled'] = 'Show icon';
 $string['labelrules_image']        = 'Default card image';
-$string['labelrules_saved']        = 'Label rules saved.';
 $string['card_image_source']         = 'Card image';
-$string['card_image_source_none']    = 'No image';
 $string['card_image_source_library'] = 'Choose from image library';
 $string['card_image_source_upload']  = 'Upload an image';
 $string['card_label_override']       = 'Custom label';
-$string['card_label_override_help']  = 'Overrides the course-level label rule for this activity only.';
 $string['card_icon_override']        = 'Custom icon (Font Awesome class)';
 $string['card_icon_enabled']         = 'Show icon on this card';
 $string['card_overrides_explainer']   = 'Icons &amp; Labels';
 $string['card_overrides_explainer_desc'] = 'Override the icon and label rules for this card only. Leave unchecked to inherit from Card Styling Rules.';
-$string['card_description_display']  = 'Show description';
 $string['completionprogress']        = 'Progress';
 $string['card_completion_todo']      = 'Not yet completed';
 $string['card_completion_done']      = 'Completed';
 $string['card_completion_failed']    = 'Not passed';
 $string['card_completion_criteria']  = 'Completion requires: {$a}';
-$string['backtocourse']              = 'Back to course';
 $string['backtosection']             = 'Back to {$a}';
 $string['card_restricted']           = 'Restricted';
-$string['card_hidden']               = 'Hidden';
+$string['card_hidden']               = 'Hidden from students';
 $string['card_restrictedhidden']     = '(Hidden otherwise)';
 $string['card_restrictedbysection']  = 'This item is inside a restricted section.';
 $string['card_restriction_detail']   = 'Access conditions apply — see activity for details.';
@@ -76,16 +83,10 @@ $string['noactivities']           = 'No activities have been added to this secti
 $string['subsection_depthlabel']  = 'Contains sub-activities — click to go deeper';
 
 // Card settings page.
-$string['cardsettings']                = 'Card settings';
-$string['cardsettings_saved']          = 'Card settings saved.';
 $string['cardsettings_image']          = 'Card Styling Overrides';
 $string['cardsettings_currentimage']   = 'Current image';
-$string['cardsettings_pickfromlibrary'] = 'Select an image from the library:';
 $string['cardsettings_acceptedtypes']  = 'Accepted formats: JPG, PNG, WebP, GIF, SVG';
-$string['cardsettings_savetolibrary']  = 'Also save this image to the library for reuse in other courses';
-$string['cardsettings_labelhelp']      = 'Override the label and icon for this activity card. Leave blank to use the course rule or the default module name.';
 $string['imagelibrary_empty']          = 'No images in the library yet. Upload one below, or ask your site administrator to add images.';
-$string['imagelibrary_scope']          = 'Make available to';
 
 // Section visibility strings — Moodle looks for these in the active format's lang file.
 $string['hidefromothers'] = 'Hide';
@@ -170,9 +171,6 @@ $string['labelrules_icon_help_short']  = 'Preview updates as you type';
 
 // Card size.
 $string['cardsize']        = 'Card size';
-$string['cardsize_small']  = 'Small';
-$string['cardsize_medium'] = 'Medium';
-$string['cardsize_large']  = 'Large';
 $string['cardsize_help']   = 'Controls the width of cards in the grid. Large is similar to Vista format cards (~360px).';
 
 // Hover animation.
@@ -225,7 +223,6 @@ $string['labelrules_pushallconfirm']  = 'This will remove ALL course-level label
 $string['labelrules_pushedall']       = 'All course overrides cleared ({$a} entries removed) — all courses now inherit site defaults.';
 $string['completionbarshowin_none'] = 'None';
 $string['admindefaults_navigation']      = 'Navigation';
-$string['admindefaults_sections'] = 'Section page & icon';
 $string['admindefaults_image']    = 'Image display defaults';
 $string['labelmode']              = 'Activity labels & icons';
 $string['labelmode_help']         = 'Master switch for activity label text and icons on cards. Per-activity settings in Label Rules are preserved and restored when switching back to Both.';
@@ -273,7 +270,6 @@ $string['showactivitybar']       = 'Show progress bar on activity cards';
 $string['showactivitybar_help']  = 'When enabled, activity cards show a completion progress bar or no tracking message in the card footer.';
 $string['imagelibrary_added_multiple'] = '{$a} images added to the library.';
 $string['imagelibrary_upload_failed']  = 'No images were uploaded. Please check the files and try again.';
-$string['imagelibrary_deleted_plural'] = 'images deleted.';
 $string['admindefaults_sections']      = 'Section defaults';
 $string['admindefaults_sections_desc'] = 'Default icon and image settings for section cards. Sections are the top-level groupings in your course. Subsection icons and images are controlled via Activity card default rules. Each course can override these defaults.';
 $string['sectionicontype']             = 'Section icon style';
@@ -328,3 +324,75 @@ $string['labelrules_image_hidden']      = 'Hide image on cards';
 $string['labelrules_image_hidden_desc'] = 'Image is stored but hidden. Uncheck to show it again.';
 $string['labelrules_image_hidden_pill'] = 'Image hidden';
 $string['bulkedit_images_hint']         = 'For images: Enable shows the image, Disable hides it (keeps it stored), Remove deletes it permanently.';
+$string['labelrules_bulk_updated'] = '{$a} rule(s) updated.';
+$string['labelrules_bulk_deleted'] = '{$a} rule(s) deleted.';
+$string['labelrules_bulk_resettosite'] = '{$a} rule(s) reset to site-wide defaults.';
+$string['labelrules_bulk_resetallcourses'] = '{$a} rule(s) reset across all courses.';
+$string['labelrules_bulk_pushedselected'] = '{$a} rule(s) reset to site-wide defaults across all courses.';
+$string['imagelibrary_imageupdated'] = 'Image updated.';
+$string['imagelibrary_deleted_count'] = '{$a} images deleted.';
+$string['imagelibrary_upload_skipped'] = '{$a} skipped (duplicate names).';
+$string['imagelibrary_upload_allskipped'] = 'No images added — {$a} file(s) already exist with that name. Rename the file or delete the existing image first.';
+$string['coursemaplabels'] = 'Course map labels';
+$string['coursemaplabels_show'] = 'Show';
+$string['coursemaplabels_hide'] = 'Hide';
+$string['coursemaplabels_help'] = 'Shows a heading above each row of the course map. The headings use the label text from Card Styling Rules for Sections and Subsections (for example "Lesson"), and still appear when labels are switched off on the cards themselves.';
+$string['coursemaplabels_desc'] = 'Default for new courses. Shows a heading above each row of the course map, using the Card Styling Rules label for Sections and Subsections.';
+$string['coursemap_sectionsheading'] = 'Section';
+$string['coursemap_subsectionsheading'] = 'Subsection';
+$string['card_hiddenrestrictionnote'] = 'Students can\'t see this while it\'s hidden. These restrictions will apply once you show it.';
+$string['labelrules_ui_manageimagelib_site'] = 'Manage Card Image Library (Site wide).';
+$string['labelrules_ui_manageimagelib_course'] = 'Manage Card Image Library (This course).';
+$string['labelrules_ui_resetselected'] = 'Reset selected';
+$string['labelrules_ui_searchicons'] = 'Search icons...';
+$string['labelrules_ui_imagename'] = 'Image name';
+$string['labelrules_ui_searchimages'] = 'Search images...';
+$string['labelrules_ui_available'] = 'Available';
+$string['labelrules_ui_skipped'] = 'Skipped';
+$string['labelrules_ui_skip'] = 'Skip';
+$string['labelrules_ui_unskip'] = 'Unskip';
+$string['labelrules_ui_nselected'] = '{$a} selected';
+$string['labelrules_ui_be_enable'] = 'Enable';
+$string['labelrules_ui_be_disable'] = 'Disable';
+$string['labelrules_ui_be_remove'] = 'Remove';
+$string['labelrules_ui_be_nochange'] = 'No change';
+$string['labelrules_ui_search'] = 'Search...';
+$string['labelrules_ui_hideoverridden'] = 'Hide overridden';
+$string['labelrules_ui_flipped'] = 'Flipped';
+$string['labelrules_ui_flipped_title'] = 'Icon and label order is flipped';
+$string['labelrules_ui_vis_label'] = 'Label';
+$string['labelrules_ui_vis_icon'] = 'Icon';
+$string['labelrules_ui_overridden'] = 'Overridden';
+$string['labelrules_ui_confirm_resetallcourses'] = 'Reset all courses to the site-wide rule for this module type?';
+$string['labelrules_ui_js_selectrule'] = 'Please select at least one rule.';
+$string['labelrules_ui_js_selectfield'] = 'Please select at least one field to change.';
+$string['labelrules_ui_js_confirmbulkedit'] = 'Apply bulk edit to {$a} rule(s)?';
+$string['labelrules_ui_js_confirmreset'] = 'Reset {$a} rule(s)?';
+$string['labelrules_ui_js_confirmdelete'] = 'Delete {$a} rule(s)? This cannot be undone.';
+$string['labelrules_ui_js_applyto'] = 'Apply to {$a} rule(s)';
+$string['bundledimage_name'] = '{$a} (default)';
+$string['imagelibrary_ui_select'] = 'Select';
+$string['imagelibrary_ui_edit'] = 'Edit';
+$string['imagelibrary_ui_usedinrules'] = 'Used in {$a} Card Styling Rule(s)';
+$string['imagelibrary_ui_usedincourses'] = 'Used in course(s)';
+$string['imagelibrary_ui_download'] = 'Download';
+$string['imagelibrary_ui_managerules'] = 'Manage Card Styling Rules for this course.';
+$string['imagelibrary_ui_nselected'] = '{$a} selected';
+$string['imagelibrary_ui_deleteselected'] = 'Delete selected';
+$string['imagelibrary_ui_clearselection'] = 'Clear selection';
+$string['imagelibrary_ui_namehint'] = 'Names will be auto-filled from filenames.';
+$string['imagelibrary_ui_clear'] = 'Clear';
+$string['imagelibrary_ui_dropfiles'] = 'Drop files here or';
+$string['imagelibrary_ui_browse'] = 'browse';
+$string['imagelibrary_ui_filetypes'] = 'JPG, PNG, SVG, WebP, GIF · Select multiple files at once';
+$string['imagelibrary_ui_coursenote'] = 'Images added here are only available to this course. Site-wide images are in the';
+$string['imagelibrary_ui_legend_rule'] = 'Used in Card Styling Rule';
+$string['imagelibrary_ui_legend_course'] = 'Used in course';
+$string['imagelibrary_ui_editimage'] = 'Edit image';
+$string['imagelibrary_ui_replacefile'] = 'Replace image file';
+$string['imagelibrary_ui_optional'] = '(optional)';
+$string['imagelibrary_ui_addtolib'] = 'Add to library';
+$string['imagelibrary_ui_addn'] = 'Add {$a} images to library';
+$string['imagelibrary_ui_nfiles'] = '{$a} files selected';
+$string['imagelibrary_ui_visibleof'] = '{$a->visible} of {$a->total} images';
+$string['imagelibrary_ui_confirmdelete'] = 'Delete {$a} selected image(s)? This cannot be undone.';

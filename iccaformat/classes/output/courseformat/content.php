@@ -46,6 +46,18 @@ use renderer_base;
 class content extends content_base {
 
     /**
+     * @var bool Skip building the course-home card grid. Set by the renderer on section
+     *           and subsection pages, which never display it.
+     */
+    public $skiphomegrid = false;
+
+    /** @var array|null Library image records by id, loaded once per request. */
+    private $libimagecache = null;
+
+    /** @var array|null Section description_display values by section id, loaded once per request. */
+    private $descdisplaycache = null;
+
+    /**
      * Export data for templates.
      *
      * When editing: calls parent for Moodle's editing infrastructure.
@@ -68,11 +80,11 @@ class content extends content_base {
 
         // --- Course format options -------------------------------------------
         $formatoptions       = $format->get_format_options();
-        $borderradius        = (int)    ($formatoptions['borderradius']        ?? 8);
+        $borderradius        = (int)    ($formatoptions['borderradius'] ?? 8);
         $completioncolour    = (string) ($formatoptions['completionbarcolour'] ?? '#2d7fc1');
         $completionbarshowin = (int)    ($formatoptions['completionbarshowin'] ?? 2);
-        $cardsize            = (string) ($formatoptions['cardsize']             ?: 'medium');
-        $hoverstyle          = (string) ($formatoptions['hoverstyle']           ?: 'imgzoom');
+        $cardsize            = (string) ($formatoptions['cardsize'] ?: 'medium');
+        $hoverstyle          = (string) ($formatoptions['hoverstyle'] ?: 'imgzoom');
         // Read image display options directly — get_format_options() may return empty
         // string for new options on existing courses. We query the DB directly.
         $defaultobjectfit    = 'cover';
@@ -80,36 +92,52 @@ class content extends content_base {
         $defaultfilter       = 'none';
         $defaultoverlay      = 'none';
         $defaultbgcolour     = '#ffffff';
-        if (!empty($formatoptions['imageobjectfit']))      { $defaultobjectfit  = $formatoptions['imageobjectfit']; }
-        if (!empty($formatoptions['imageobjectposition'])) { $defaultposition   = $formatoptions['imageobjectposition']; }
-        if (!empty($formatoptions['imagefilter']))         { $defaultfilter     = $formatoptions['imagefilter']; }
-        if (!empty($formatoptions['imageoverlay']))        { $defaultoverlay    = $formatoptions['imageoverlay']; }
+        if (!empty($formatoptions['imageobjectfit']))      { $defaultobjectfit  = $formatoptions['imageobjectfit'];
+        }
+        if (!empty($formatoptions['imageobjectposition'])) { $defaultposition   = $formatoptions['imageobjectposition'];
+        }
+        if (!empty($formatoptions['imagefilter']))         { $defaultfilter     = $formatoptions['imagefilter'];
+        }
+        if (!empty($formatoptions['imageoverlay']))        { $defaultoverlay    = $formatoptions['imageoverlay'];
+        }
         // Also check DB directly as fallback.
         global $DB;
         $dbvals = $DB->get_records_menu('course_format_options',
             ['courseid' => $course->id, 'sectionid' => 0,
              'format' => 'iccaformat'], '', 'name,value');
-        if (!empty($dbvals['imageobjectfit']))      { $defaultobjectfit  = $dbvals['imageobjectfit']; }
-        if (!empty($dbvals['imageobjectposition'])) { $defaultposition   = $dbvals['imageobjectposition']; }
-        if (!empty($dbvals['imagefilter']))         { $defaultfilter     = $dbvals['imagefilter']; }
-        if (!empty($dbvals['imageoverlay']))        { $defaultoverlay    = $dbvals['imageoverlay']; }
-        if (!empty($dbvals['imagebackgroundcolour'])) { $defaultbgcolour = $dbvals['imagebackgroundcolour']; }
-        if (!empty($dbvals['cardsize']))   { $cardsize   = $dbvals['cardsize']; }
-        if (!empty($dbvals['hoverstyle'])) { $hoverstyle = $dbvals['hoverstyle']; }
+        if (!empty($dbvals['imageobjectfit']))      { $defaultobjectfit  = $dbvals['imageobjectfit'];
+        }
+        if (!empty($dbvals['imageobjectposition'])) { $defaultposition   = $dbvals['imageobjectposition'];
+        }
+        if (!empty($dbvals['imagefilter']))         { $defaultfilter     = $dbvals['imagefilter'];
+        }
+        if (!empty($dbvals['imageoverlay']))        { $defaultoverlay    = $dbvals['imageoverlay'];
+        }
+        if (!empty($dbvals['imagebackgroundcolour'])) { $defaultbgcolour = $dbvals['imagebackgroundcolour'];
+        }
+        if (!empty($dbvals['cardsize']))   { $cardsize   = $dbvals['cardsize'];
+        }
+        if (!empty($dbvals['hoverstyle'])) { $hoverstyle = $dbvals['hoverstyle'];
+        }
         $footerfontsize = (string) ($formatoptions['footerfontsize'] ?: '0.85');
-        if (!empty($dbvals['footerfontsize'])) { $footerfontsize = $dbvals['footerfontsize']; }
+        if (!empty($dbvals['footerfontsize'])) { $footerfontsize = $dbvals['footerfontsize'];
+        }
         // Sanitise — strip anything that isn't a number or decimal point.
         $footerfontsize = preg_replace('/[^0-9.]/', '', $footerfontsize) ?: '1';
         $descfontsize = array_key_exists('descriptionfontsize', $dbvals) ? (string) $dbvals['descriptionfontsize'] : (string) ($formatoptions['descriptionfontsize'] ?? '1');
         $descfontsize = preg_replace('/[^0-9.]/', '', $descfontsize) ?: '1';
         $dropdownfontsize = (string) ($formatoptions['dropdownfontsize'] ?: '0.8');
-        if (!empty($dbvals['dropdownfontsize'])) { $dropdownfontsize = $dbvals['dropdownfontsize']; }
+        if (!empty($dbvals['dropdownfontsize'])) { $dropdownfontsize = $dbvals['dropdownfontsize'];
+        }
         $dropdownfontsize = preg_replace('/[^0-9.]/', '', $dropdownfontsize) ?: '0.8';
         $hoverzoom = max(100, min(150, (int) ($formatoptions['hoverzoom'] ?: 105)));
-        if (!empty($dbvals['hoverzoom'])) { $hoverzoom = max(100, min(150, (int)$dbvals['hoverzoom'])); }
+        if (!empty($dbvals['hoverzoom'])) { $hoverzoom = max(100, min(150, (int)$dbvals['hoverzoom']));
+        }
         $hovercolour = (string) ($formatoptions['hovercolour'] ?: '#0d3c6f');
-        if (!empty($dbvals['hovercolour'])) { $hovercolour = $dbvals['hovercolour']; }
-        if (!preg_match('/^#[0-9a-fA-F]{6}$/', $hovercolour)) { $hovercolour = '#0d3c6f'; }
+        if (!empty($dbvals['hovercolour'])) { $hovercolour = $dbvals['hovercolour'];
+        }
+        if (!preg_match('/^#[0-9a-fA-F]{6}$/', $hovercolour)) { $hovercolour = '#0d3c6f';
+        }
 
         // Card size → grid column widths.
         $cardsizemap = [
@@ -134,7 +162,8 @@ class content extends content_base {
 
         $completionenabled = $course->enablecompletion && isloggedin() && !isguestuser();
         $completiondata    = [];
-        if ($completionenabled) {
+        // Completion data here only feeds the course-home grid; section pages load their own.
+        if ($completionenabled && !$this->skiphomegrid) {
             $ci = new \completion_info($course);
             if ($ci->is_enabled()) {
                 foreach ($modinfo->cms as $cm) {
@@ -157,7 +186,9 @@ class content extends content_base {
         $usemodimages        = array_key_exists('usemodimages', $dbvals) ? (int) $dbvals['usemodimages'] : 1;
         $showactivitybar     = array_key_exists('showactivitybar', $dbvals) ? (int) $dbvals['showactivitybar'] : 1;
 
-        foreach ($modinfo->get_section_info_all() as $section) {
+        // Section and subsection pages use build_section_interior_data() instead and never
+        // show this grid, so don't build it for them.
+        foreach ($this->skiphomegrid ? [] : $modinfo->get_section_info_all() as $section) {
             if ($section->section == 0) {
                 continue;
             }
@@ -247,7 +278,7 @@ class content extends content_base {
         $canedit       = has_capability('moodle/course:update', $context);
 
         $formatoptions       = $format->get_format_options();
-        $borderradius        = (int)    ($formatoptions['borderradius']        ?? 8);
+        $borderradius        = (int)    ($formatoptions['borderradius'] ?? 8);
         $completioncolour    = (string) ($formatoptions['completionbarcolour'] ?? '#2d7fc1');
         $completionbarshowin = (int)    ($formatoptions['completionbarshowin'] ?? 2);
 
@@ -264,20 +295,29 @@ class content extends content_base {
         $defaultfilter       = 'none';
         $defaultoverlay      = 'none';
         $defaultbgcolour     = '#ffffff';
-        if (!empty($formatoptions['imageobjectfit']))      { $defaultobjectfit  = $formatoptions['imageobjectfit']; }
-        if (!empty($formatoptions['imageobjectposition'])) { $defaultposition   = $formatoptions['imageobjectposition']; }
-        if (!empty($formatoptions['imagefilter']))         { $defaultfilter     = $formatoptions['imagefilter']; }
-        if (!empty($formatoptions['imageoverlay']))        { $defaultoverlay    = $formatoptions['imageoverlay']; }
+        if (!empty($formatoptions['imageobjectfit']))      { $defaultobjectfit  = $formatoptions['imageobjectfit'];
+        }
+        if (!empty($formatoptions['imageobjectposition'])) { $defaultposition   = $formatoptions['imageobjectposition'];
+        }
+        if (!empty($formatoptions['imagefilter']))         { $defaultfilter     = $formatoptions['imagefilter'];
+        }
+        if (!empty($formatoptions['imageoverlay']))        { $defaultoverlay    = $formatoptions['imageoverlay'];
+        }
         // Also check DB directly as fallback.
         global $DB;
         $dbvals = $DB->get_records_menu('course_format_options',
             ['courseid' => $course->id, 'sectionid' => 0,
              'format' => 'iccaformat'], '', 'name,value');
-        if (!empty($dbvals['imageobjectfit']))      { $defaultobjectfit  = $dbvals['imageobjectfit']; }
-        if (!empty($dbvals['imageobjectposition'])) { $defaultposition   = $dbvals['imageobjectposition']; }
-        if (!empty($dbvals['imagefilter']))         { $defaultfilter     = $dbvals['imagefilter']; }
-        if (!empty($dbvals['imageoverlay']))        { $defaultoverlay    = $dbvals['imageoverlay']; }
-        if (!empty($dbvals['imagebackgroundcolour'])) { $defaultbgcolour   = $dbvals['imagebackgroundcolour']; }
+        if (!empty($dbvals['imageobjectfit']))      { $defaultobjectfit  = $dbvals['imageobjectfit'];
+        }
+        if (!empty($dbvals['imageobjectposition'])) { $defaultposition   = $dbvals['imageobjectposition'];
+        }
+        if (!empty($dbvals['imagefilter']))         { $defaultfilter     = $dbvals['imagefilter'];
+        }
+        if (!empty($dbvals['imageoverlay']))        { $defaultoverlay    = $dbvals['imageoverlay'];
+        }
+        if (!empty($dbvals['imagebackgroundcolour'])) { $defaultbgcolour   = $dbvals['imagebackgroundcolour'];
+        }
         $usemodimages      = array_key_exists('usemodimages', $dbvals) ? (int) $dbvals['usemodimages'] : 1;
         $showactivitybar   = array_key_exists('showactivitybar', $dbvals) ? (int) $dbvals['showactivitybar'] : 1;
 
@@ -377,12 +417,16 @@ class content extends content_base {
 
         // Section/subsection interior progress bar.
         $sectionprogbar   = (int) ($formatoptions['sectionprogbar'] ?? 2);
-        if (array_key_exists('sectionprogbar', $dbvals)) { $sectionprogbar = (int) $dbvals['sectionprogbar']; }
+        if (array_key_exists('sectionprogbar', $dbvals)) { $sectionprogbar = (int) $dbvals['sectionprogbar'];
+        }
         $issubsectionpage = ($section->component === 'mod_subsection');
         $showbar = false;
-        if ($sectionprogbar == 2) { $showbar = true; }
-        else if ($sectionprogbar == 0 && !$issubsectionpage) { $showbar = true; }
-        else if ($sectionprogbar == 1 && $issubsectionpage)  { $showbar = true; }
+        if ($sectionprogbar == 2) { $showbar = true;
+        }
+        else if ($sectionprogbar == 0 && !$issubsectionpage) { $showbar = true;
+        }
+        else if ($sectionprogbar == 1 && $issubsectionpage)  { $showbar = true;
+        }
         $notrackingstr    = get_string('card_notracking', 'format_iccaformat');
 
         if ($showbar) {
@@ -390,29 +434,36 @@ class content extends content_base {
             $done = 0; $total = 0;
             foreach ($cmids as $cmid) {
                 $cm = $modinfo->cms[$cmid] ?? null;
-                if (!$cm) continue;
+                if (!$cm) { continue;
+                }
                 if ($cm->modname === 'subsection') {
                     // Walk into subsection.
                     foreach ($modinfo->get_section_info_all() as $s) {
                         if ($s->component === 'mod_subsection' && $s->itemid == $cm->instance) {
                             foreach ($modinfo->sections[$s->section] ?? [] as $subcmid) {
-                                if (!isset($completiondata[$subcmid])) continue;
+                                if (!isset($completiondata[$subcmid])) { continue;
+                                }
                                 $subcm = $modinfo->cms[$subcmid] ?? null;
-                                if (!$subcm || $subcm->modname === 'label') continue;
+                                if (!$subcm || $subcm->modname === 'label') { continue;
+                                }
                                 $total++;
                                 $state = $completiondata[$subcmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                                if ($state == COMPLETION_COMPLETE || $state == COMPLETION_COMPLETE_PASS) $done++;
+                                if ($state == COMPLETION_COMPLETE || $state == COMPLETION_COMPLETE_PASS) { $done++;
+                                }
                             }
                             break;
                         }
                     }
                 } else {
-                    if (!isset($completiondata[$cmid])) continue;
+                    if (!isset($completiondata[$cmid])) { continue;
+                    }
                     $cm2 = $modinfo->cms[$cmid] ?? null;
-                    if (!$cm2 || $cm2->modname === 'label') continue;
+                    if (!$cm2 || $cm2->modname === 'label') { continue;
+                    }
                     $total++;
                     $state = $completiondata[$cmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                    if ($state == COMPLETION_COMPLETE || $state == COMPLETION_COMPLETE_PASS) $done++;
+                    if ($state == COMPLETION_COMPLETE || $state == COMPLETION_COMPLETE_PASS) { $done++;
+                    }
                 }
             }
             $data->sectionprogress        = true;
@@ -431,16 +482,33 @@ class content extends content_base {
         }
 
         // ── Course map navigation ─────────────────────────────────────────
-        $showcoursemap   = (int) ($formatoptions['showcoursemap']   ?? 1);
-        if (!empty($dbvals['showcoursemap']))   { $showcoursemap   = (int) $dbvals['showcoursemap']; }
-        $showhomebutton  = (int) ($formatoptions['showhomebutton']  ?? 1);
-        if (!empty($dbvals['showhomebutton']))  { $showhomebutton  = (int) $dbvals['showhomebutton']; }
+        $showcoursemap   = (int) ($formatoptions['showcoursemap'] ?? 1);
+        if (!empty($dbvals['showcoursemap']))   { $showcoursemap   = (int) $dbvals['showcoursemap'];
+        }
+        $showhomebutton  = (int) ($formatoptions['showhomebutton'] ?? 1);
+        if (!empty($dbvals['showhomebutton']))  { $showhomebutton  = (int) $dbvals['showhomebutton'];
+        }
 
         $data->showcoursemap    = (bool) $showcoursemap;
         $data->showhomebutton   = (bool) $showhomebutton;
         $data->showstrip        = ($sectionprogbar != 3 || $showhomebutton || $showcoursemap);
         $data->shownavbuttons   = ($showhomebutton || $showcoursemap);
         $data->coursemaplabel    = get_string('showcoursemap', 'format_iccaformat');
+
+        // Row headings on the course map ("Section" / "Subsection", or whatever the
+        // Card Styling Rules call them). Uses the rule's label text even when labels are
+        // switched off on the cards themselves; per-card label overrides are ignored.
+        $maplabelsopt = array_key_exists('coursemaplabels', $dbvals)
+            ? $dbvals['coursemaplabels']
+            : ($formatoptions['coursemaplabels'] ?? '');
+        $data->showmaplabels = ($maplabelsopt === '' || $maplabelsopt === null) ? true : ((int) $maplabelsopt === 1);
+        $maprowlabel = function (string $modname, string $fallbackkey) use ($labelrules): string {
+            $rule = $labelrules[$modname] ?? null;
+            $text = $rule ? trim((string) $rule->label) : '';
+            return $text !== '' ? $text : get_string($fallbackkey, 'format_iccaformat');
+        };
+        $data->maplabelsections    = $maprowlabel('section', 'coursemap_sectionsheading');
+        $data->maplabelsubsections = $maprowlabel('subsection', 'coursemap_subsectionsheading');
         $data->coursemapitems    = [];
         $data->hascoursemapitems = false;
         $data->issubsectionmap   = false;
@@ -456,7 +524,8 @@ class content extends content_base {
                 // Find parent section.
                 $parentsection = null;
                 foreach ($modinfo->get_section_info_all() as $s) {
-                    if (!$s->visible && !has_capability('moodle/course:viewhiddensections', $context)) continue;
+                    if (!$s->visible && !has_capability('moodle/course:viewhiddensections', $context)) { continue;
+                    }
                     foreach ($modinfo->sections[$s->section] ?? [] as $cmid) {
                         $cm = $modinfo->cms[$cmid] ?? null;
                         if ($cm && $cm->modname === 'subsection' && $cm->instance == $section->itemid) {
@@ -471,30 +540,38 @@ class content extends content_base {
                     $pdone = 0; $ptotal = 0;
                     foreach ($modinfo->sections[$parentsection->section] ?? [] as $cmid) {
                         $cm = $modinfo->cms[$cmid] ?? null;
-                        if (!$cm) continue;
+                        if (!$cm) { continue;
+                        }
                         if ($cm->modname === 'subsection') {
                             foreach ($modinfo->get_section_info_all() as $sub) {
-                                if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) continue;
+                                if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) { continue;
+                                }
                                 foreach ($modinfo->sections[$sub->section] ?? [] as $subcmid) {
-                                    if (!isset($completiondata[$subcmid])) continue;
+                                    if (!isset($completiondata[$subcmid])) { continue;
+                                    }
                                     $subcm = $modinfo->cms[$subcmid] ?? null;
-                                    if (!$subcm || $subcm->modname === 'label') continue;
+                                    if (!$subcm || $subcm->modname === 'label') { continue;
+                                    }
                                     $ptotal++;
                                     $st = $completiondata[$subcmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                                    if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) $pdone++;
+                                    if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) { $pdone++;
+                                    }
                                 }
                                 break;
                             }
                         } else {
-                            if (!isset($completiondata[$cmid])) continue;
-                            if ($cm->modname === 'label') continue;
+                            if (!isset($completiondata[$cmid])) { continue;
+                            }
+                            if ($cm->modname === 'label') { continue;
+                            }
                             $ptotal++;
                             $st = $completiondata[$cmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                            if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) $pdone++;
+                            if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) { $pdone++;
+                            }
                         }
                     }
                     $pbg = \format_iccaformat\local\format_option::get_from_cache(
-                        $optioncache, $parentsection->id, 'imagebackgroundcolour', $defaultbgcolour);
+                        $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $parentsection->id, 'imagebackgroundcolour', $defaultbgcolour);
                     $data->parentbanner = [
                         'name'             => $format->get_section_name($parentsection),
                         'url'              => (new \moodle_url('/course/section.php', ['id' => $parentsection->id]))->out(false),
@@ -507,36 +584,47 @@ class content extends content_base {
 
                     // Build all top-level sections — parent is iscurrent, others are not.
                     foreach ($modinfo->get_section_info_all() as $s) {
-                        if ($s->section == 0) continue;
-                        if ($s->component === 'mod_subsection') continue;
-                        if (!$s->visible && !has_capability('moodle/course:viewhiddensections', $context)) continue;
+                        if ($s->section == 0) { continue;
+                        }
+                        if ($s->component === 'mod_subsection') { continue;
+                        }
+                        if (!$s->visible && !has_capability('moodle/course:viewhiddensections', $context)) { continue;
+                        }
                         $mdone = 0; $mtotal = 0;
                         foreach ($modinfo->sections[$s->section] ?? [] as $cmid) {
                             $cm = $modinfo->cms[$cmid] ?? null;
-                            if (!$cm) continue;
+                            if (!$cm) { continue;
+                            }
                             if ($cm->modname === 'subsection') {
                                 foreach ($modinfo->get_section_info_all() as $sub) {
-                                    if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) continue;
+                                    if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) { continue;
+                                    }
                                     foreach ($modinfo->sections[$sub->section] ?? [] as $subcmid) {
-                                        if (!isset($completiondata[$subcmid])) continue;
+                                        if (!isset($completiondata[$subcmid])) { continue;
+                                        }
                                         $subcm = $modinfo->cms[$subcmid] ?? null;
-                                        if (!$subcm || $subcm->modname === 'label') continue;
+                                        if (!$subcm || $subcm->modname === 'label') { continue;
+                                        }
                                         $mtotal++;
                                         $st = $completiondata[$subcmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                                        if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) $mdone++;
+                                        if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) { $mdone++;
+                                        }
                                     }
                                     break;
                                 }
                             } else {
-                                if (!isset($completiondata[$cmid])) continue;
-                                if ($cm->modname === 'label') continue;
+                                if (!isset($completiondata[$cmid])) { continue;
+                                }
+                                if ($cm->modname === 'label') { continue;
+                                }
                                 $mtotal++;
                                 $st = $completiondata[$cmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                                if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) $mdone++;
+                                if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) { $mdone++;
+                                }
                             }
                         }
                         $bgcolour = \format_iccaformat\local\format_option::get_from_cache(
-                            $optioncache, $s->id, 'imagebackgroundcolour', $defaultbgcolour);
+                            $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $s->id, 'imagebackgroundcolour', $defaultbgcolour);
                         $data->coursemapitems[] = [
                             'name'             => $format->get_section_name($s),
                             'url'              => (new \moodle_url('/course/section.php', ['id' => $s->id]))->out(false),
@@ -554,28 +642,34 @@ class content extends content_base {
                             'staffhidden'      => (!$s->visible && $canedit),
                             'studenthidden'    => (!$s->visible && !$canedit),
                             'staffrestricted'  => ($s->visible && !$s->available && $canedit && empty($s->availableinfo)),
-                            'studentrestricted'=> ($s->visible && !$s->available && !$canedit && empty($s->availableinfo)),
+                            'studentrestricted' => ($s->visible && !$s->available && !$canedit && empty($s->availableinfo)),
                         ];
                     }
 
                     // Build sibling subsections — indented below sections.
                     foreach ($modinfo->sections[$parentsection->section] ?? [] as $cmid) {
                         $cm = $modinfo->cms[$cmid] ?? null;
-                        if (!$cm || $cm->modname !== 'subsection') continue;
+                        if (!$cm || $cm->modname !== 'subsection') { continue;
+                        }
                         foreach ($modinfo->get_section_info_all() as $sub) {
-                            if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) continue;
-                            if (!$sub->visible && !has_capability('moodle/course:viewhiddensections', $context)) break;
+                            if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) { continue;
+                            }
+                            if (!$sub->visible && !has_capability('moodle/course:viewhiddensections', $context)) { break;
+                            }
                             $mdone = 0; $mtotal = 0;
                             foreach ($modinfo->sections[$sub->section] ?? [] as $subcmid) {
-                                if (!isset($completiondata[$subcmid])) continue;
+                                if (!isset($completiondata[$subcmid])) { continue;
+                                }
                                 $subcm = $modinfo->cms[$subcmid] ?? null;
-                                if (!$subcm || $subcm->modname === 'label') continue;
+                                if (!$subcm || $subcm->modname === 'label') { continue;
+                                }
                                 $mtotal++;
                                 $st = $completiondata[$subcmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                                if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) $mdone++;
+                                if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) { $mdone++;
+                                }
                             }
                             $bgcolour = \format_iccaformat\local\format_option::get_from_cache(
-                                $optioncache, $sub->id, 'imagebackgroundcolour', $defaultbgcolour);
+                                $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sub->id, 'imagebackgroundcolour', $defaultbgcolour);
                             $data->othersections[] = [
                                 'name'             => $sub->name ?: get_string('section'),
                                 'url'              => (new \moodle_url('/course/section.php', ['id' => $sub->id]))->out(false),
@@ -593,7 +687,7 @@ class content extends content_base {
                                 'staffhidden'      => (!$sub->visible && $canedit),
                                 'studenthidden'    => (!$sub->visible && !$canedit),
                                 'staffrestricted'  => ($sub->visible && !$sub->available && $canedit && empty($sub->availableinfo)),
-                                'studentrestricted'=> ($sub->visible && !$sub->available && !$canedit && empty($sub->availableinfo)),
+                                'studentrestricted' => ($sub->visible && !$sub->available && !$canedit && empty($sub->availableinfo)),
                             ];
                             break;
                         }
@@ -602,36 +696,47 @@ class content extends content_base {
             } else {
                 // Section page — show all top-level sections, then subsections of current section.
                 foreach ($modinfo->get_section_info_all() as $s) {
-                    if ($s->section == 0) continue;
-                    if ($s->component === 'mod_subsection') continue;
-                    if (!$s->visible && !has_capability('moodle/course:viewhiddensections', $context)) continue;
+                    if ($s->section == 0) { continue;
+                    }
+                    if ($s->component === 'mod_subsection') { continue;
+                    }
+                    if (!$s->visible && !has_capability('moodle/course:viewhiddensections', $context)) { continue;
+                    }
                     $mdone = 0; $mtotal = 0;
                     foreach ($modinfo->sections[$s->section] ?? [] as $cmid) {
                         $cm = $modinfo->cms[$cmid] ?? null;
-                        if (!$cm) continue;
+                        if (!$cm) { continue;
+                        }
                         if ($cm->modname === 'subsection') {
                             foreach ($modinfo->get_section_info_all() as $sub) {
-                                if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) continue;
+                                if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) { continue;
+                                }
                                 foreach ($modinfo->sections[$sub->section] ?? [] as $subcmid) {
-                                    if (!isset($completiondata[$subcmid])) continue;
+                                    if (!isset($completiondata[$subcmid])) { continue;
+                                    }
                                     $subcm = $modinfo->cms[$subcmid] ?? null;
-                                    if (!$subcm || $subcm->modname === 'label') continue;
+                                    if (!$subcm || $subcm->modname === 'label') { continue;
+                                    }
                                     $mtotal++;
                                     $st = $completiondata[$subcmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                                    if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) $mdone++;
+                                    if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) { $mdone++;
+                                    }
                                 }
                                 break;
                             }
                         } else {
-                            if (!isset($completiondata[$cmid])) continue;
-                            if ($cm->modname === 'label') continue;
+                            if (!isset($completiondata[$cmid])) { continue;
+                            }
+                            if ($cm->modname === 'label') { continue;
+                            }
                             $mtotal++;
                             $st = $completiondata[$cmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                            if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) $mdone++;
+                            if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) { $mdone++;
+                            }
                         }
                     }
                     $bgcolour = \format_iccaformat\local\format_option::get_from_cache(
-                        $optioncache, $s->id, 'imagebackgroundcolour', $defaultbgcolour);
+                        $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $s->id, 'imagebackgroundcolour', $defaultbgcolour);
                     $data->coursemapitems[] = [
                         'name'             => $format->get_section_name($s),
                         'url'              => (new \moodle_url('/course/section.php', ['id' => $s->id]))->out(false),
@@ -649,28 +754,34 @@ class content extends content_base {
                         'staffhidden'      => (!$s->visible && $canedit),
                         'studenthidden'    => (!$s->visible && !$canedit),
                         'staffrestricted'  => ($s->visible && !$s->available && $canedit && empty($s->availableinfo)),
-                        'studentrestricted'=> ($s->visible && !$s->available && !$canedit && empty($s->availableinfo)),
+                        'studentrestricted' => ($s->visible && !$s->available && !$canedit && empty($s->availableinfo)),
                     ];
                 }
 
                 // Subsections of the current section — indented below.
                 foreach ($modinfo->sections[$section->section] ?? [] as $cmid) {
                     $cm = $modinfo->cms[$cmid] ?? null;
-                    if (!$cm || $cm->modname !== 'subsection') continue;
+                    if (!$cm || $cm->modname !== 'subsection') { continue;
+                    }
                     foreach ($modinfo->get_section_info_all() as $sub) {
-                        if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) continue;
-                        if (!$sub->visible && !has_capability('moodle/course:viewhiddensections', $context)) break;
+                        if ($sub->component !== 'mod_subsection' || $sub->itemid != $cm->instance) { continue;
+                        }
+                        if (!$sub->visible && !has_capability('moodle/course:viewhiddensections', $context)) { break;
+                        }
                         $mdone = 0; $mtotal = 0;
                         foreach ($modinfo->sections[$sub->section] ?? [] as $subcmid) {
-                            if (!isset($completiondata[$subcmid])) continue;
+                            if (!isset($completiondata[$subcmid])) { continue;
+                            }
                             $subcm = $modinfo->cms[$subcmid] ?? null;
-                            if (!$subcm || $subcm->modname === 'label') continue;
+                            if (!$subcm || $subcm->modname === 'label') { continue;
+                            }
                             $mtotal++;
                             $st = $completiondata[$subcmid]->completionstate ?? COMPLETION_INCOMPLETE;
-                            if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) $mdone++;
+                            if ($st == COMPLETION_COMPLETE || $st == COMPLETION_COMPLETE_PASS) { $mdone++;
+                            }
                         }
                         $bgcolour = \format_iccaformat\local\format_option::get_from_cache(
-                            $optioncache, $sub->id, 'imagebackgroundcolour', $defaultbgcolour);
+                            $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sub->id, 'imagebackgroundcolour', $defaultbgcolour);
                         $data->othersections[] = [
                             'name'             => $sub->name ?: get_string('section'),
                             'url'              => (new \moodle_url('/course/section.php', ['id' => $sub->id]))->out(false),
@@ -688,7 +799,7 @@ class content extends content_base {
                             'staffhidden'      => (!$sub->visible && $canedit),
                             'studenthidden'    => (!$sub->visible && !$canedit),
                             'staffrestricted'  => ($sub->visible && !$sub->available && $canedit && empty($sub->availableinfo)),
-                            'studentrestricted'=> ($sub->visible && !$sub->available && !$canedit && empty($sub->availableinfo)),
+                            'studentrestricted' => ($sub->visible && !$sub->available && !$canedit && empty($sub->availableinfo)),
                         ];
                         break;
                     }
@@ -731,7 +842,7 @@ class content extends content_base {
         $card->issubsection = false;
         $card->isactivity   = false;
 
-        $imgcss = $this->resolve_image_css($optioncache, $section->id,
+        $imgcss = $this->resolve_image_css($optioncache, format_option::ELEMENT_SECTION, $section->id,
             $defaultobjectfit, $defaultposition, $defaultfilter, $defaultoverlay, $defaultbgcolour);
         $card->imageobjectfit      = $imgcss['objectfit'];
         $card->imageobjectposition = $imgcss['objectposition'];
@@ -741,20 +852,20 @@ class content extends content_base {
         $card->imagebgcolour       = $imgcss['bgcolour'];
 
         $this->apply_description($card, $section->summary ?? '', $section->summaryformat ?? FORMAT_HTML,
-            $optioncache, $section->id, $course->id, 'inbox');
+            $optioncache, format_option::ELEMENT_SECTION, $section->id, $course->id, 'inbox');
 
         // Section image — explicit pick first, then label rules default for 'section'.
         $card->imageurl = $this->resolve_element_image(
-            $section->id, $optioncache, $course->id, 'section', $labelrules, $output);
+            format_option::ELEMENT_SECTION, $section->id, $optioncache, $course->id, 'section', $labelrules, $output);
         $card->hasimage = !empty($card->imageurl);
 
         // Section icon — driven by label rules for 'section', with per-card override.
         $sectionrule     = $labelrules['section'] ?? null;
         $sectionnum      = $section->section;
-        $iconenabledopt  = format_option::get_from_cache($optioncache, $section->id, format_option::OPT_ICON_ENABLED, null);
-        $labelenabledopt = format_option::get_from_cache($optioncache, $section->id, format_option::OPT_LABEL_ENABLED, null);
-        $iconoverride    = format_option::get_from_cache($optioncache, $section->id, format_option::OPT_ICON_OVERRIDE, '');
-        $labeloverride   = format_option::get_from_cache($optioncache, $section->id, format_option::OPT_LABEL_OVERRIDE, '');
+        $iconenabledopt  = format_option::get_from_cache($optioncache, format_option::ELEMENT_SECTION, $section->id, format_option::OPT_ICON_ENABLED, null);
+        $labelenabledopt = format_option::get_from_cache($optioncache, format_option::ELEMENT_SECTION, $section->id, format_option::OPT_LABEL_ENABLED, null);
+        $iconoverride    = format_option::get_from_cache($optioncache, format_option::ELEMENT_SECTION, $section->id, format_option::OPT_ICON_OVERRIDE, '');
+        $labeloverride   = format_option::get_from_cache($optioncache, format_option::ELEMENT_SECTION, $section->id, format_option::OPT_LABEL_OVERRIDE, '');
         $iconenabled     = $iconenabledopt !== null
             ? ($iconenabledopt === '1')
             : (!empty($sectionrule->icon_enabled));
@@ -779,7 +890,7 @@ class content extends content_base {
             } else if ($icontype === 'roman') {
                 $card->sectionicontext = $this->to_roman($sectionnum);
                 $card->showsectionicon = true;
-            } else if (!empty($icontype) && !in_array($icontype, ['none','numeric','alpha','ALPHA','roman'])) {
+            } else if (!empty($icontype) && !in_array($icontype, ['none', 'numeric', 'alpha', 'ALPHA', 'roman'])) {
                 $card->sectioniconclass = 'fa ' . $icontype;
                 $card->showsectionicon = !empty($sectionrule->icon_enabled);
             }
@@ -793,15 +904,15 @@ class content extends content_base {
             $card->namelabel = $labeloverride ?: ($sectionrule ? $sectionrule->label : '');
             $card->haslabel  = !empty($card->namelabel);
         }
-        $flipopt_sec = format_option::get_from_cache($optioncache, $section->id, format_option::OPT_ICON_LABEL_FLIPPED, null);
-        $card->flipped = $flipopt_sec !== null ? ((int)$flipopt_sec === 1) : !empty($sectionrule->flipped);
+        $flipoptsec = format_option::get_from_cache($optioncache, format_option::ELEMENT_SECTION, $section->id, format_option::OPT_ICON_LABEL_FLIPPED, null);
+        $card->flipped = $flipoptsec !== null ? ((int)$flipoptsec === 1) : !empty($sectionrule->flipped);
 
         $showbar = ($completionbarshowin == 0 || $completionbarshowin == 2);
         $this->apply_completion_bar($card, $showbar, $section, $modinfo,
             $completiondata, $completioncolour);
 
         $card->restricted       = (!$section->available && $section->visible)
-            || ($canedit && !empty($section->availability)); // Staff always see restrictions
+            || ($canedit && self::has_restriction_conditions($section->availability)); // Staff always see restrictions
         $card->restrictedhidden = (!$section->available && $section->visible && empty($section->availableinfo));
         $card->restrictioninfo  = '';
         if ($card->restricted) {
@@ -844,7 +955,7 @@ class content extends content_base {
         $card->isactivity   = true;
         $card->modname      = $cm->modname;
 
-        $imgcss = $this->resolve_image_css($optioncache, $cm->id,
+        $imgcss = $this->resolve_image_css($optioncache, format_option::ELEMENT_CM, $cm->id,
             $defaultobjectfit, $defaultposition, $defaultfilter, $defaultoverlay, $defaultbgcolour);
         $card->imageobjectfit      = $imgcss['objectfit'];
         $card->imageobjectposition = $imgcss['objectposition'];
@@ -854,10 +965,10 @@ class content extends content_base {
         $card->imagebgcolour       = $imgcss['bgcolour'];
 
         // --- Label and icon (rule → override → modname fallback) -------------
-        $labeloverride  = format_option::get_from_cache($optioncache, $cm->id, format_option::OPT_LABEL_OVERRIDE);
-        $iconoverride   = format_option::get_from_cache($optioncache, $cm->id, format_option::OPT_ICON_OVERRIDE);
-        $iconenabled    = format_option::get_from_cache($optioncache, $cm->id, format_option::OPT_ICON_ENABLED, null);
-        $labelenabledopt = format_option::get_from_cache($optioncache, $cm->id, format_option::OPT_LABEL_ENABLED, null);
+        $labeloverride  = format_option::get_from_cache($optioncache, format_option::ELEMENT_CM, $cm->id, format_option::OPT_LABEL_OVERRIDE);
+        $iconoverride   = format_option::get_from_cache($optioncache, format_option::ELEMENT_CM, $cm->id, format_option::OPT_ICON_OVERRIDE);
+        $iconenabled    = format_option::get_from_cache($optioncache, format_option::ELEMENT_CM, $cm->id, format_option::OPT_ICON_ENABLED, null);
+        $labelenabledopt = format_option::get_from_cache($optioncache, format_option::ELEMENT_CM, $cm->id, format_option::OPT_LABEL_ENABLED, null);
 
         $rule = $labelrules[$cm->modname] ?? null;
 
@@ -878,24 +989,24 @@ class content extends content_base {
             : null;
         $card->hasicon   = !empty($card->icon);
         // Flipped — per-card override wins over rule.
-        $flippedopt = format_option::get_from_cache($optioncache, $cm->id, format_option::OPT_ICON_LABEL_FLIPPED, null);
+        $flippedopt = format_option::get_from_cache($optioncache, format_option::ELEMENT_CM, $cm->id, format_option::OPT_ICON_LABEL_FLIPPED, null);
         $card->flipped  = $flippedopt !== null ? ((int)$flippedopt === 1) : !empty($rule->flipped);
 
         // --- Image -----------------------------------------------------------
         $card->imageurl = $this->resolve_element_image(
-            $cm->id, $optioncache, $course->id, $cm->modname, $labelrules, $output, $usemodimages);
+            format_option::ELEMENT_CM, $cm->id, $optioncache, $course->id, $cm->modname, $labelrules, $output, $usemodimages);
         $card->hasimage = !empty($card->imageurl);
 
         // --- Description -----------------------------------------------------
         $this->apply_description($card, $cm->content ?? '', FORMAT_HTML,
-            $optioncache, $cm->id, $course->id, 'inbox');
+            $optioncache, format_option::ELEMENT_CM, $cm->id, $course->id, 'inbox');
 
         // --- Completion ------------------------------------------------------
         $this->apply_activity_completion($card, $cm, $completiondata, $completioncolour, (bool) $showactivitybar);
 
         // --- Restrictions ----------------------------------------------------
         $card->restricted          = !$cm->available
-            || ($canedit && !empty($cm->availability)); // Staff always see restrictions
+            || ($canedit && self::has_restriction_conditions($cm->availability)); // Staff always see restrictions
         $card->restrictedhidden    = (!$cm->available && empty($cm->availableinfo));
         $card->restrictedbysection = false;
         $card->restrictioninfo     = '';
@@ -954,10 +1065,11 @@ class content extends content_base {
             }
         }
         $optionsid       = $delegatedsection ? $delegatedsection->id : $cm->id;
-        $iconenabledopt  = format_option::get_from_cache($optioncache, $optionsid, format_option::OPT_ICON_ENABLED, null);
-        $labelenabledopt = format_option::get_from_cache($optioncache, $optionsid, format_option::OPT_LABEL_ENABLED, null);
-        $iconoverride    = format_option::get_from_cache($optioncache, $optionsid, format_option::OPT_ICON_OVERRIDE, '');
-        $labeloverride   = format_option::get_from_cache($optioncache, $optionsid, format_option::OPT_LABEL_OVERRIDE, '');
+        $optionstype     = $delegatedsection ? format_option::ELEMENT_SECTION : format_option::ELEMENT_CM;
+        $iconenabledopt  = format_option::get_from_cache($optioncache, $optionstype, $optionsid, format_option::OPT_ICON_ENABLED, null);
+        $labelenabledopt = format_option::get_from_cache($optioncache, $optionstype, $optionsid, format_option::OPT_LABEL_ENABLED, null);
+        $iconoverride    = format_option::get_from_cache($optioncache, $optionstype, $optionsid, format_option::OPT_ICON_OVERRIDE, '');
+        $labeloverride   = format_option::get_from_cache($optioncache, $optionstype, $optionsid, format_option::OPT_LABEL_OVERRIDE, '');
         $iconenabled  = $iconenabledopt !== null ? ($iconenabledopt === '1') : (!empty($subsectionrule->icon_enabled));
         // Custom icon override takes priority over rule.
         if ($iconenabled && !empty($iconoverride)) {
@@ -979,24 +1091,24 @@ class content extends content_base {
             } else {
                 $card->haslabel  = false;
             }
-        $flipopt_sub = format_option::get_from_cache($optioncache, $optionsid, format_option::OPT_ICON_LABEL_FLIPPED, null);
-        $card->flipped = $flipopt_sub !== null ? ((int)$flipopt_sub === 1) : !empty($subsectionrule->flipped);
+            $flipoptsub = format_option::get_from_cache($optioncache, $optionstype, $optionsid, format_option::OPT_ICON_LABEL_FLIPPED, null);
+            $card->flipped = $flipoptsub !== null ? ((int)$flipoptsub === 1) : !empty($subsectionrule->flipped);
             $card->url  = $format->get_view_url($delegatedsection)->out(false);
 
-            $imgcss = $this->resolve_image_css($optioncache, $delegatedsection->id,
+            $imgcss = $this->resolve_image_css($optioncache, format_option::ELEMENT_SECTION, $delegatedsection->id,
                 $defaultobjectfit, $defaultposition, $defaultfilter, $defaultoverlay, $defaultbgcolour);
             $card->imageobjectfit      = $imgcss['objectfit'];
             $card->imageobjectposition = $imgcss['objectposition'];
             $card->imagefilter         = $imgcss['filter'];
             $card->imageoverlay        = $imgcss['overlay'];
             $card->hasoverlay          = $imgcss['hasoverlay'];
-        $card->imagebgcolour       = $imgcss['bgcolour'];
+            $card->imagebgcolour       = $imgcss['bgcolour'];
 
             $this->apply_description($card, $delegatedsection->summary, $delegatedsection->summaryformat,
-                $optioncache, $delegatedsection->id, $course->id, 'inbox');
+                $optioncache, format_option::ELEMENT_SECTION, $delegatedsection->id, $course->id, 'inbox');
 
             $card->imageurl = $this->resolve_element_image(
-                $delegatedsection->id, $optioncache, $course->id, 'subsection', $labelrules, $output, $usemodimages ?? 1);
+                format_option::ELEMENT_SECTION, $delegatedsection->id, $optioncache, $course->id, 'subsection', $labelrules, $output, $usemodimages ?? 1);
 
             // Completion bar on subsections + activity breakdown dropdown.
             $showbar = ($completionbarshowin == 1 || $completionbarshowin == 2);
@@ -1008,7 +1120,8 @@ class content extends content_base {
             $activityrows = [];
             foreach ($modinfo->sections[$delegatedsection->section] ?? [] as $subcmid) {
                 $subcm = $modinfo->cms[$subcmid] ?? null;
-                if (!$subcm || !$subcm->visible || $subcm->modname === 'label') continue;
+                if (!$subcm || !$subcm->visible || $subcm->modname === 'label') { continue;
+                }
                 $acturl = $subcm->url ? $subcm->url->out(false) : '#';
                 if (isset($completiondata[$subcmid])) {
                     $state = $completiondata[$subcmid]->completionstate ?? COMPLETION_INCOMPLETE;
@@ -1045,7 +1158,7 @@ class content extends content_base {
 
             // Restrictions.
             $card->restricted       = (!$delegatedsection->available && $delegatedsection->visible)
-                || ($canedit && !empty($delegatedsection->availability)); // Staff always see restrictions
+                || ($canedit && self::has_restriction_conditions($delegatedsection->availability)); // Staff always see restrictions
             $card->restrictedhidden = (!$delegatedsection->available && $delegatedsection->visible && empty($delegatedsection->availableinfo));
             $card->restrictedbysection = false;
             $card->hidden           = !$delegatedsection->visible;
@@ -1078,7 +1191,7 @@ class content extends content_base {
             $card->restricted   = false;
             $card->restrictioninfo = '';
             $this->apply_description($card, '', FORMAT_HTML,
-                $optioncache, $cm->id, $course->id, 'inbox');
+                $optioncache, format_option::ELEMENT_CM, $cm->id, $course->id, 'inbox');
         }
 
         $card->hasimage = !empty($card->imageurl);
@@ -1098,6 +1211,7 @@ class content extends content_base {
         string $summary,
         int $summaryformat,
         array $optioncache,
+        int $elementtype,
         int $elementid,
         int $courseid,
         string $defaultdescdisplay = 'inbox'
@@ -1108,19 +1222,26 @@ class content extends content_base {
         // (set via the section edit form). element_options may have stale 'hidden' values
         // from the old system — check course_format_options first, then element_options,
         // then course default.
-        $row = $DB->get_record('course_format_options', [
-            'courseid'  => $courseid,
-            'sectionid' => $elementid,
-            'name'      => 'description_display',
-        ]);
+        // Only sections have course_format_options rows — an activity's cmid must never be
+        // looked up as a sectionid, as the two id sequences overlap.
+        $sectionvalue = null;
+        if (format_option::ns($elementtype) === format_option::NS_SECTION) {
+            if ($this->descdisplaycache === null) {
+                // All sections' values in one query (sectionid is unique per course/format/name).
+                $this->descdisplaycache = $DB->get_records_select_menu('course_format_options',
+                    'courseid = ? AND format = ? AND name = ?',
+                    [$courseid, 'iccaformat', 'description_display'], '', 'sectionid, value');
+            }
+            $sectionvalue = $this->descdisplaycache[$elementid] ?? null;
+        }
 
-        if ($row && $row->value !== '') {
+        if ($sectionvalue !== null && $sectionvalue !== '') {
             // Section edit form value wins.
-            $descdisplay = (string) $row->value;
+            $descdisplay = (string) $sectionvalue;
         } else {
             // Fall back to element_options (activities), then course default.
             $descdisplay = format_option::get_from_cache(
-                $optioncache, $elementid,
+                $optioncache, $elementtype, $elementid,
                 format_option::OPT_DESCRIPTION_DISPLAY,
                 $defaultdescdisplay
             ) ?: $defaultdescdisplay;
@@ -1252,16 +1373,16 @@ class content extends content_base {
      * Returns array with keys: object-fit, object-position, filter, overlay.
      */
     private function resolve_image_css(
-        array $optioncache, int $elementid,
+        array $optioncache, int $elementtype, int $elementid,
         string $defaultfit, string $defaultposition,
         string $defaultfilter, string $defaultoverlay,
         string $defaultbgcolour = '#ffffff'
     ): array {
-        $fit      = format_option::get_from_cache($optioncache, $elementid, 'imageobjectfit', '')      ?: $defaultfit;
-        $position = format_option::get_from_cache($optioncache, $elementid, 'imageobjectposition', '') ?: $defaultposition;
-        $filter   = format_option::get_from_cache($optioncache, $elementid, 'imagefilter', '')         ?: $defaultfilter;
-        $overlay  = format_option::get_from_cache($optioncache, $elementid, 'imageoverlay', '')        ?: $defaultoverlay;
-        $bgcolour = format_option::get_from_cache($optioncache, $elementid, 'imagebackgroundcolour', '') ?: $defaultbgcolour;
+        $fit      = format_option::get_from_cache($optioncache, $elementtype, $elementid, 'imageobjectfit', '') ?: $defaultfit;
+        $position = format_option::get_from_cache($optioncache, $elementtype, $elementid, 'imageobjectposition', '') ?: $defaultposition;
+        $filter   = format_option::get_from_cache($optioncache, $elementtype, $elementid, 'imagefilter', '') ?: $defaultfilter;
+        $overlay  = format_option::get_from_cache($optioncache, $elementtype, $elementid, 'imageoverlay', '') ?: $defaultoverlay;
+        $bgcolour = format_option::get_from_cache($optioncache, $elementtype, $elementid, 'imagebackgroundcolour', '') ?: $defaultbgcolour;
 
         $filtercss = match($filter) {
             'grayscale' => 'grayscale(100%)',
@@ -1277,7 +1398,7 @@ class content extends content_base {
         };
 
         return [
-            'objectfit'      => $fit      ?: 'cover',
+            'objectfit'      => $fit ?: 'cover',
             'objectposition' => $position ?: 'center',
             'filter'         => $filtercss,
             'overlay'        => $overlaycss,
@@ -1287,11 +1408,11 @@ class content extends content_base {
     }
 
     private function resolve_element_image(
-        int $elementid, array $optioncache, int $courseid,
+        int $elementtype, int $elementid, array $optioncache, int $courseid,
         ?string $modname, array $labelrules, renderer_base $output,
         int $usemodimages = 1
     ): string {
-        $imagesource = format_option::get_from_cache($optioncache, $elementid, format_option::OPT_IMAGE_SOURCE);
+        $imagesource = format_option::get_from_cache($optioncache, $elementtype, $elementid, format_option::OPT_IMAGE_SOURCE);
 
         // Explicit "no image" override — suppress default too.
         if ($imagesource === 'none') {
@@ -1299,7 +1420,7 @@ class content extends content_base {
         }
 
         if ($imagesource === 'library') {
-            $imageid = (int) format_option::get_from_cache($optioncache, $elementid, format_option::OPT_IMAGE_ID, 0);
+            $imageid = (int) format_option::get_from_cache($optioncache, $elementtype, $elementid, format_option::OPT_IMAGE_ID, 0);
             if ($imageid) {
                 return $this->library_image_url($imageid);
             }
@@ -1307,12 +1428,13 @@ class content extends content_base {
 
         if ($imagesource === 'upload') {
             static $filecache = [];
-            $cachekey = $courseid . '_' . $elementid;
+            $filearea = format_option::filearea($elementtype);
+            $cachekey = $courseid . '_' . $filearea . '_' . $elementid;
             if (!array_key_exists($cachekey, $filecache)) {
                 $context = \context_course::instance($courseid);
                 $fs      = get_file_storage();
                 $files   = $fs->get_area_files(
-                    $context->id, 'format_iccaformat', 'element_image',
+                    $context->id, 'format_iccaformat', $filearea,
                     $elementid, 'itemid', false
                 );
                 $filecache[$cachekey] = !empty($files) ? reset($files) : null;
@@ -1320,7 +1442,7 @@ class content extends content_base {
             if ($filecache[$cachekey]) {
                 $context = \context_course::instance($courseid);
                 return \moodle_url::make_pluginfile_url(
-                    $context->id, 'format_iccaformat', 'element_image',
+                    $context->id, 'format_iccaformat', $filearea,
                     $elementid, '/', $filecache[$cachekey]->get_filename()
                 )->out(false);
             }
@@ -1341,9 +1463,56 @@ class content extends content_base {
     /**
      * Convert integer to lowercase Roman numeral string.
      */
+    /**
+     * Does a stored availability (restrict access) value contain any actual conditions?
+     *
+     * Moodle can store an empty restriction set, e.g. {"op":"&","c":[],"showc":[]}, after
+     * "Restrict access" has been opened and saved with nothing in it, or after the last
+     * condition was removed. That is a non-empty string but restricts nothing, so it must
+     * not show the Restricted badge. Nested empty sets count as empty too.
+     *
+     * Unreadable JSON is treated as having conditions, so staff still see the badge
+     * rather than a real restriction being silently hidden from them.
+     *
+     * @param  string|null $availability The section's or activity's availability JSON.
+     * @return bool
+     */
+    private static function has_restriction_conditions(?string $availability): bool {
+        if ($availability === null || trim($availability) === '') {
+            return false;
+        }
+        $tree = json_decode($availability);
+        if (!is_object($tree)) {
+            return true;
+        }
+        return self::tree_has_conditions($tree);
+    }
+
+    /**
+     * Recursive helper for has_restriction_conditions().
+     *
+     * @param  \stdClass $node An availability tree node or condition.
+     * @return bool
+     */
+    private static function tree_has_conditions(\stdClass $node): bool {
+        if (!isset($node->c)) {
+            // Not a tree, so it is a condition in its own right.
+            return true;
+        }
+        if (!is_array($node->c)) {
+            return true;
+        }
+        foreach ($node->c as $child) {
+            if (!is_object($child) || self::tree_has_conditions($child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private function to_roman(int $n): string {
-        $map = [1000=>'m',900=>'cm',500=>'d',400=>'cd',100=>'c',90=>'xc',
-                50=>'l',40=>'xl',10=>'x',9=>'ix',5=>'v',4=>'iv',1=>'i'];
+        $map = [1000 => 'm', 900 => 'cm', 500 => 'd', 400 => 'cd', 100 => 'c', 90 => 'xc',
+                50 => 'l', 40 => 'xl', 10 => 'x', 9 => 'ix', 5 => 'v', 4 => 'iv', 1 => 'i'];
         $result = '';
         foreach ($map as $val => $numeral) {
             while ($n >= $val) {
@@ -1356,7 +1525,17 @@ class content extends content_base {
 
     private function library_image_url(int $imageid): string {
         global $DB;
-        $record = $DB->get_record('iccaformat_image_library', ['id' => $imageid]);
+        if ($this->libimagecache === null) {
+            // Site-wide and this course's library in one query — covers almost every card.
+            $coursectx = \context_course::instance($this->format->get_courseid());
+            $this->libimagecache = $DB->get_records_select('iccaformat_image_library',
+                'contextid IN (?, ?)', [\context_system::instance()->id, $coursectx->id]);
+        }
+        if (!array_key_exists($imageid, $this->libimagecache)) {
+            // An image from elsewhere (e.g. another course's library): look it up once.
+            $this->libimagecache[$imageid] = $DB->get_record('iccaformat_image_library', ['id' => $imageid]);
+        }
+        $record = $this->libimagecache[$imageid];
         if (!$record) {
             return '';
         }
@@ -1403,7 +1582,8 @@ class content extends content_base {
 
         foreach ($modinfo->sections[$section->section] ?? [] as $cmid) {
             $cm = $modinfo->cms[$cmid] ?? null;
-            if (!$cm) continue;
+            if (!$cm) { continue;
+            }
 
             if ($cm->modname === 'subsection') {
                 // Find the delegated section for this subsection.
@@ -1418,15 +1598,18 @@ class content extends content_base {
                     }
                 }
                 $delegated = $sectionbyitemid[$cm->instance] ?? null;
-                if (!$delegated) continue;
+                if (!$delegated) { continue;
+                }
                 // Skip hidden sections.
-                if (!$delegated->visible) continue;
+                if (!$delegated->visible) { continue;
+                }
 
                 // Count activities inside the subsection.
                 $subdone  = 0;
                 $subtotal = 0;
                 foreach ($modinfo->sections[$delegated->section] ?? [] as $subcmid) {
-                    if (!isset($completiondata[$subcmid])) continue;
+                    if (!isset($completiondata[$subcmid])) { continue;
+                    }
                     $subtotal++;
                     $state = $completiondata[$subcmid]->completionstate ?? COMPLETION_INCOMPLETE;
                     if ($state == COMPLETION_COMPLETE || $state == COMPLETION_COMPLETE_PASS) {
@@ -1462,7 +1645,8 @@ class content extends content_base {
                 }
             } else {
                 // Direct activity.
-                if (!isset($completiondata[$cmid])) continue;
+                if (!isset($completiondata[$cmid])) { continue;
+                }
                 $directtotal++;
                 $state = $completiondata[$cmid]->completionstate ?? COMPLETION_INCOMPLETE;
                 if ($state == COMPLETION_COMPLETE || $state == COMPLETION_COMPLETE_PASS) {

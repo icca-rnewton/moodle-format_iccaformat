@@ -459,7 +459,7 @@ class image_library {
         $now      = time();
         $record   = (object)[
             'contextid'    => $contextid,
-            'name'         => $name,
+            'name'         => \core_text::substr(trim($name), 0, 255),
             'description'  => '',
             'filename'     => $filename,
             'userid'       => $userid,
@@ -486,6 +486,55 @@ class image_library {
         }
 
         return $imageid;
+    }
+
+    /**
+     * Replace an existing library image's file from a raw PHP upload.
+     *
+     * Applies exactly the same checks as save_new_from_raw_upload(): accepted image types
+     * only, and SVGs cleaned before storage.
+     *
+     * @param  int    $imageid
+     * @param  string $tmpfile  Path to temp file from $_FILES.
+     * @param  string $filename Original filename.
+     * @return bool   True if replaced; false if the record is missing or the file was refused.
+     */
+    public static function replace_from_raw_upload(int $imageid, string $tmpfile, string $filename): bool {
+        global $DB;
+
+        $record = self::get($imageid);
+        if (!$record) {
+            return false;
+        }
+        $mimetype = mime_content_type($tmpfile);
+        if (!in_array($mimetype, self::ACCEPTED_TYPES)) {
+            return false;
+        }
+
+        $fs = get_file_storage();
+        $fs->delete_area_files($record->contextid, self::COMPONENT, self::FILEAREA, $imageid);
+
+        $filename = clean_filename($filename);
+        $fileinfo = [
+            'contextid' => $record->contextid,
+            'component' => self::COMPONENT,
+            'filearea'  => self::FILEAREA,
+            'itemid'    => $imageid,
+            'filepath'  => '/',
+            'filename'  => $filename,
+        ];
+        if ($mimetype === 'image/svg+xml') {
+            $fs->create_file_from_string($fileinfo, self::sanitise_svg((string) file_get_contents($tmpfile)));
+        } else {
+            $fs->create_file_from_pathname($fileinfo, $tmpfile);
+        }
+
+        $DB->update_record(self::TABLE, (object) [
+            'id'           => $imageid,
+            'filename'     => $filename,
+            'timemodified' => time(),
+        ]);
+        return true;
     }
 
     /**
@@ -612,7 +661,7 @@ class image_library {
         $syscontextid = \context_system::instance()->id;
 
         // Don't duplicate if already in system context.
-        if ($record->contextid === $syscontextid) {
+        if ((int) $record->contextid === (int) $syscontextid) {
             return $imageid;
         }
 

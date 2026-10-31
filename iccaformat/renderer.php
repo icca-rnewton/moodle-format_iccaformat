@@ -43,15 +43,13 @@ class format_iccaformat_renderer extends section_renderer {
      * @return void
      */
     public function render_content(): void {
-        global $PAGE;
-
         $format = course_get_format($this->page->course->id);
 
         // --- Editing mode: use core content class + core template ------------
         // This gives "Add activity", drag handles, visibility toggles etc.
         // We use the core_courseformat base class directly (not our subclass)
         // to avoid any risk of our export_for_template() being called.
-        if ($PAGE->user_is_editing()) {
+        if ($this->page->user_is_editing()) {
             $contentclass = 'core_courseformat\output\local\content';
             $widget       = new $contentclass($format);
             $data         = $widget->export_for_template($this);
@@ -79,6 +77,8 @@ class format_iccaformat_renderer extends section_renderer {
 
         $contentclass = $format->get_output_classname('content');
         $widget       = new $contentclass($format);
+        // Section/subsection pages don't show the course-home grid, so don't build it.
+        $widget->skiphomegrid = (bool) $sectionnum;
         $data         = $widget->export_for_template($this);
 
         if ($sectionnum) {

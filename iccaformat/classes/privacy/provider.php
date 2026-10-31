@@ -83,7 +83,7 @@ class provider implements
         $context = $userlist->get_context();
         $userlist->add_from_sql(
             'userid',
-            'SELECT userid FROM {iccaformat_image_library} WHERE contextid = :contextid',
+            'SELECT userid FROM {iccaformat_image_library} WHERE contextid = :contextid AND userid > 0',
             ['contextid' => $context->id]
         );
     }
@@ -115,22 +115,38 @@ class provider implements
         }
     }
 
+    /*
+     * Erasure: why images are kept and the uploader is removed.
+     *
+     * A library image is course (or site) content: other cards and Card Styling Rules use it,
+     * and deleting it would strip images from courses the user may no longer even teach on.
+     * The only personal data in this table is who uploaded the image (userid). Erasure
+     * therefore removes that attribution (userid = 0) and keeps the image. This is a
+     * deliberate judgement call, recorded here so a reviewer can see the reasoning.
+     */
+
     /**
-     * Delete all personal data for all users in a context.
+     * Remove uploader attribution for everyone in a context. Images are kept.
+     *
+     * @param \context $context
+     * @return void
      */
     public static function delete_data_for_all_users_in_context(\context $context): void {
         global $DB;
-        $DB->delete_records('iccaformat_image_library', ['contextid' => $context->id]);
+        $DB->set_field('iccaformat_image_library', 'userid', 0, ['contextid' => $context->id]);
     }
 
     /**
-     * Delete personal data for a specific user in given contexts.
+     * Remove one user's uploader attribution in the approved contexts. Images are kept.
+     *
+     * @param approved_contextlist $contextlist
+     * @return void
      */
     public static function delete_data_for_user(approved_contextlist $contextlist): void {
         global $DB;
         $userid = $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
-            $DB->delete_records('iccaformat_image_library', [
+            $DB->set_field('iccaformat_image_library', 'userid', 0, [
                 'userid'    => $userid,
                 'contextid' => $context->id,
             ]);
@@ -138,7 +154,10 @@ class provider implements
     }
 
     /**
-     * Delete personal data for a list of users in a context.
+     * Remove uploader attribution for a list of users in a context. Images are kept.
+     *
+     * @param approved_userlist $userlist
+     * @return void
      */
     public static function delete_data_for_users(approved_userlist $userlist): void {
         global $DB;
@@ -149,10 +168,7 @@ class provider implements
         }
         [$insql, $inparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
         $inparams['contextid'] = $context->id;
-        $DB->delete_records_select(
-            'iccaformat_image_library',
-            "contextid = :contextid AND userid $insql",
-            $inparams
-        );
+        $DB->set_field_select('iccaformat_image_library', 'userid', 0,
+            "contextid = :contextid AND userid $insql", $inparams);
     }
 }

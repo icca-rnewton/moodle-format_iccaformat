@@ -66,34 +66,22 @@ $PAGE->set_heading($courseid ? $course->fullname : get_string('formatlibrary_sit
 if ($action === 'edit' && $imageid && confirm_sesskey()) {
     $record = image_library::get($imageid);
     if ($record && ($issiteadmin || (int)$record->contextid === (int)$libcontextid)) {
-        $newname = optional_param('editname', '', PARAM_TEXT);
+        $newname = core_text::substr(trim(optional_param('editname', '', PARAM_TEXT)), 0, 255);
         if ($newname) {
             global $DB;
             $DB->set_field('iccaformat_image_library', 'name', $newname, ['id' => $imageid]);
         }
-        // Replace file if one was uploaded.
+        // Replace file if one was uploaded — same type checks and SVG cleaning as a new upload.
         if (!empty($_FILES['editfile']['tmp_name']) && $_FILES['editfile']['error'] === UPLOAD_ERR_OK) {
-            $fs       = get_file_storage();
-            $origfile = $fs->get_file($record->contextid, 'format_iccaformat', 'library_image',
-                $imageid, '/', $record->filename);
-            if ($origfile) {
-                $origfile->delete();
+            if (!image_library::replace_from_raw_upload($imageid, $_FILES['editfile']['tmp_name'],
+                    $_FILES['editfile']['name'])) {
+                redirect(new moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]),
+                    get_string('imagelibrary_upload_failed', 'format_iccaformat'),
+                    null, \core\output\notification::NOTIFY_WARNING);
             }
-            $newfilename = clean_filename($_FILES['editfile']['name']);
-            $fileinfo = [
-                'contextid' => $record->contextid,
-                'component' => 'format_iccaformat',
-                'filearea'  => 'library_image',
-                'itemid'    => $imageid,
-                'filepath'  => '/',
-                'filename'  => $newfilename,
-            ];
-            $fs->create_file_from_pathname($fileinfo, $_FILES['editfile']['tmp_name']);
-            global $DB;
-            $DB->set_field('iccaformat_image_library', 'filename', $newfilename, ['id' => $imageid]);
         }
         redirect(new moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]),
-            'Image updated.',
+            get_string('imagelibrary_imageupdated', 'format_iccaformat'),
             null, \core\output\notification::NOTIFY_SUCCESS);
     }
 }
@@ -109,7 +97,7 @@ if ($action === 'deletebulk' && confirm_sesskey()) {
         }
     }
     redirect(new moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]),
-        $deleted . ' ' . get_string('imagelibrary_deleted_plural', 'format_iccaformat'),
+        get_string('imagelibrary_deleted_count', 'format_iccaformat', $deleted),
         null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
@@ -129,8 +117,12 @@ if ($action === 'delete' && $imageid && confirm_sesskey()) {
     }
 }
 
-if ($action === 'promote' && $imageid && confirm_sesskey()) {
-    $newid = image_library::promote_to_format_library($imageid, $USER->id);
+// Promote a course image to the site-wide library. Site admins only, and only an image
+// from the library being viewed — enforced here, not just by hiding the button.
+if ($action === 'promote' && $imageid && $issiteadmin && confirm_sesskey()) {
+    $record = image_library::get($imageid);
+    $newid  = ($record && (int) $record->contextid === (int) $libcontextid)
+        ? image_library::promote_to_format_library($imageid, $USER->id) : 0;
     if ($newid) {
         redirect(new moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]),
             get_string('formatlibrary_promoted', 'format_iccaformat'),
@@ -146,9 +138,9 @@ if ($action === 'upload' && confirm_sesskey()) {
     $files = $_FILES['imagefile_direct'] ?? [];
     if (!empty($files['tmp_name'])) {
         // Normalise to array form whether one or many files submitted.
-        $tmpnames  = is_array($files['tmp_name'])  ? $files['tmp_name']  : [$files['tmp_name']];
-        $filenames = is_array($files['name'])       ? $files['name']      : [$files['name']];
-        $errors    = is_array($files['error'])      ? $files['error']     : [$files['error']];
+        $tmpnames  = is_array($files['tmp_name']) ? $files['tmp_name'] : [$files['tmp_name']];
+        $filenames = is_array($files['name']) ? $files['name'] : [$files['name']];
+        $errors    = is_array($files['error']) ? $files['error'] : [$files['error']];
 
         foreach ($tmpnames as $i => $tmp) {
             if (empty($tmp) || ($errors[$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -160,12 +152,15 @@ if ($action === 'upload' && confirm_sesskey()) {
             $autoname = preg_replace('/\.[^.]+$/', '', $origname);
             $autoname = trim(preg_replace('/[_\-]+/', ' ', $autoname));
             $autoname = ucwords(strtolower($autoname));
-            if (!$autoname) { $autoname = 'Image ' . ($i + 1); }
+            if (!$autoname) { $autoname = 'Image ' . ($i + 1);
+            }
 
             $newid = image_library::save_new_from_raw_upload(
                 $autoname, $tmp, $origname, $libcontextid, $USER->id
             );
-            if ($newid) { $added++; } else { $skipped++; }
+            if ($newid) { $added++;
+            } else { $skipped++;
+            }
         }
     }
 
@@ -174,13 +169,13 @@ if ($action === 'upload' && confirm_sesskey()) {
             ? get_string('imagelibrary_updated', 'format_iccaformat')
             : get_string('imagelibrary_added_multiple', 'format_iccaformat', $added);
         if ($skipped > 0) {
-            $msg .= ' ' . $skipped . ' skipped (duplicate names).';
+            $msg .= ' ' . get_string('imagelibrary_upload_skipped', 'format_iccaformat', $skipped);
         }
         redirect(new moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]),
             $msg, null, \core\output\notification::NOTIFY_SUCCESS);
     } else {
         $msg = $skipped > 0
-            ? 'No images added — ' . $skipped . ' file(s) already exist with that name. Rename the file or delete the existing image first.'
+            ? get_string('imagelibrary_upload_allskipped', 'format_iccaformat', $skipped)
             : get_string('imagelibrary_upload_failed', 'format_iccaformat');
         redirect(new moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]),
             $msg, null, \core\output\notification::NOTIFY_WARNING);
@@ -198,8 +193,10 @@ $siteimages = ($libcontextid !== $sysctxid)
 // --- Helper: format filesize --------------------------------------------
 
 function icca_format_filesize(int $bytes): string {
-    if ($bytes >= 1048576) return round($bytes / 1048576, 1) . 'MB';
-    if ($bytes >= 1024)    return round($bytes / 1024)       . 'KB';
+    if ($bytes >= 1048576) { return round($bytes / 1048576, 1) . 'MB';
+    }
+    if ($bytes >= 1024) {    return round($bytes / 1024)       . 'KB';
+    }
     return $bytes . 'B';
 }
 
@@ -232,7 +229,7 @@ function icca_render_tile($img, $courseid, $isformatlib, $issiteadmin) {
 
     // Select checkbox — top left.
     if ($candelete) {
-        echo '<label class="icca-tile-check" title="Select" onclick="event.stopPropagation();">'
+        echo '<label class="icca-tile-check" title="' . get_string('imagelibrary_ui_select', 'format_iccaformat') . '" onclick="event.stopPropagation();">'
             . '<input type="checkbox" class="icca-tile-checkbox" value="' . (int)$img->id . '"'
             . ' onchange="iccaUpdateBulkBar()" onclick="event.stopPropagation();">'
             . '</label>';
@@ -247,7 +244,7 @@ function icca_render_tile($img, $courseid, $isformatlib, $issiteadmin) {
             : get_string('imagelibrary_deleteconfirm', 'format_iccaformat');
         echo '<div class="icca-tile-actions" onclick="event.stopPropagation()">';
         echo '<a href="#" class="icca-tile-action icca-tile-edit"'
-            . ' title="Edit" onclick="event.stopPropagation();iccaOpenEdit(' . (int)$img->id . ', \''
+            . ' title="' . get_string('imagelibrary_ui_edit', 'format_iccaformat') . '" onclick="event.stopPropagation();iccaOpenEdit(' . (int)$img->id . ', \''
             . addslashes(s($img->name)) . '\'); return false;">'
             . '<i class="fa fa-pencil" aria-hidden="true"></i></a>';
         echo '<a href="' . $delurl . '" class="icca-tile-action icca-tile-del"'
@@ -256,9 +253,6 @@ function icca_render_tile($img, $courseid, $isformatlib, $issiteadmin) {
             . '<i class="fa fa-trash" aria-hidden="true"></i></a>';
         echo '</div>';
     }
-
-
-
 
     echo '<div class="icca-tile-foot">';
     // Top row: name
@@ -271,11 +265,11 @@ function icca_render_tile($img, $courseid, $isformatlib, $issiteadmin) {
     // Pills left.
     echo '<div class="icca-tile-pills">';
     if ($labelusages > 0) {
-        echo '<span class="icca-pill icca-pill-label" title="Used in ' . $labelusages . ' Card Styling Rule(s)">'
+        echo '<span class="icca-pill icca-pill-label" title="' . get_string('imagelibrary_ui_usedinrules', 'format_iccaformat', $labelusages) . '">'
             . '<i class="fa fa-star" aria-hidden="true"></i> ' . $labelusages . '</span>';
     }
     if ($incourses) {
-        echo '<span class="icca-pill icca-pill-course" title="Used in course(s)">'
+        echo '<span class="icca-pill icca-pill-course" title="' . get_string('imagelibrary_ui_usedincourses', 'format_iccaformat') . '">'
             . '<i class="fa fa-graduation-cap" aria-hidden="true"></i></span>';
     }
     echo '</div>';
@@ -290,7 +284,7 @@ function icca_render_tile($img, $courseid, $isformatlib, $issiteadmin) {
     }
     echo '<a href="' . htmlspecialchars($imgurl, ENT_QUOTES) . '" download="' . s($img->filename) . '"'
         . ' class="icca-tile-action icca-tile-download"'
-        . ' title="Download" onclick="event.stopPropagation();">'
+        . ' title="' . get_string('imagelibrary_ui_download', 'format_iccaformat') . '" onclick="event.stopPropagation();">'
         . '<i class="fa fa-download" aria-hidden="true"></i></a>';
     echo '</div>';
     echo '</div>'; // foot-row
@@ -327,7 +321,7 @@ if ($courseid === 0) {
         get_string('labelrules_site', 'format_iccaformat'),
         ['class' => 'btn btn-secondary', 'style' => 'margin-bottom:1rem;']
     );
-    echo '<p style="font-size:1rem;color:#6c757d;margin-bottom:1rem;">Manage Card Styling Rules for this course.</p>';
+    echo '<p style="font-size:1rem;color:#6c757d;margin-bottom:1rem;">' . get_string('imagelibrary_ui_managerules', 'format_iccaformat') . '</p>';
 } else {
     // Course page — link back to course and to course labelrules.
     echo html_writer::link(
@@ -341,7 +335,7 @@ if ($courseid === 0) {
         get_string('labelrules_course', 'format_iccaformat'),
         ['class' => 'btn btn-secondary', 'style' => 'margin-bottom:1rem;']
     );
-    echo '<p style="font-size:1rem;color:#6c757d;margin-bottom:1rem;">Manage Card Styling Rules for this course.</p>';
+    echo '<p style="font-size:1rem;color:#6c757d;margin-bottom:1rem;">' . get_string('imagelibrary_ui_managerules', 'format_iccaformat') . '</p>';
 }
 ?>
 <style>
@@ -418,11 +412,11 @@ $bulkurl = new moodle_url('/course/format/iccaformat/imagelibrary.php',
     ['courseid' => $courseid, 'action' => 'deletebulk', 'sesskey' => sesskey()]);
 echo '<form id="icca-bulk-bar" method="post" action="' . $bulkurl . '" style="display:none;grid-column:1/-1;background:#fff3cd;border:1px solid #ffe082;border-radius:8px;padding:10px 14px;align-items:center;gap:12px;margin-bottom:4px;">';
 echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
-echo '<span id="icca-bulk-count" style="font-size:1rem;color:#856404;font-weight:500;">0 selected</span>';
+echo '<span id="icca-bulk-count" style="font-size:1rem;color:#856404;font-weight:500;">' . get_string('imagelibrary_ui_nselected', 'format_iccaformat', 0) . '</span>';
 echo '<button type="submit" class="btn btn-danger btn-sm" style="display:inline-block;"'
     . ' onclick="return iccaBulkDeleteConfirm();">'
-    . '<i class="fa fa-trash" aria-hidden="true"></i> Delete selected</button>';
-echo '<button type="button" class="btn btn-secondary btn-sm" style="display:inline-block;" onclick="iccaClearSelection()">Clear selection</button>';
+    . '<i class="fa fa-trash" aria-hidden="true"></i> ' . get_string('imagelibrary_ui_deleteselected', 'format_iccaformat') . '</button>';
+echo '<button type="button" class="btn btn-secondary btn-sm" style="display:inline-block;" onclick="iccaClearSelection()">' . get_string('imagelibrary_ui_clearselection', 'format_iccaformat') . '</button>';
 echo '</form>';
 
 
@@ -439,23 +433,32 @@ echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
 
 echo '<label for="libname_new" id="libname_label">' . get_string('imagelibrary_name', 'format_iccaformat') . '</label>';
 echo '<input type="text" id="libname_new" name="libname" placeholder="' . get_string('imagelibrary_name', 'format_iccaformat') . '" autocomplete="new-password">';
-echo '<p id="libname_hint" style="font-size:0.85rem;color:#6c757d;margin:-8px 0 10px;display:none;">Names will be auto-filled from filenames.</p>';
+echo '<p id="libname_hint" style="font-size:0.85rem;color:#6c757d;margin:-8px 0 10px;display:none;">' . get_string('imagelibrary_ui_namehint', 'format_iccaformat') . '</p>';
 
 echo '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">';
 echo '<label style="margin:0;">' . get_string('imagelibrary_file', 'format_iccaformat') . '</label>';
-echo '<button type="button" id="icca-clear-btn" onclick="iccaClearUpload()" style="padding:3px 12px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:0.9rem;color:#6c757d;cursor:pointer;">Clear</button>';
+echo '<button type="button" id="icca-clear-btn" onclick="iccaClearUpload()" style="padding:3px 12px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:0.9rem;color:#6c757d;cursor:pointer;">' . get_string('imagelibrary_ui_clear', 'format_iccaformat') . '</button>';
 echo '</div>';
 echo '<div class="icca-file-area">';
 echo '<i class="fa fa-image" aria-hidden="true"></i>';
-echo '<span id="icca-file-label">Drop files here or <span style="color:#0d3c6f;text-decoration:underline;">browse</span></span>';
+echo '<span id="icca-file-label">' . get_string('imagelibrary_ui_dropfiles', 'format_iccaformat') . ' <span style="color:#0d3c6f;text-decoration:underline;">' . get_string('imagelibrary_ui_browse', 'format_iccaformat') . '</span></span>';
 echo '<input type="file" id="libfile_new" name="imagefile_direct[]" accept=".jpg,.jpeg,.png,.webp,.gif,.svg" multiple>';
 echo '</div>';
-echo '<p class="icca-file-hint">JPG, PNG, SVG, WebP, GIF · Select multiple files at once</p>';
+echo '<p class="icca-file-hint">' . get_string('imagelibrary_ui_filetypes', 'format_iccaformat') . '</p>';
 
 echo '<button type="submit" id="icca-add-btn" class="icca-add-btn" disabled style="width:100%;margin-top:14px;opacity:0.5;cursor:not-allowed;">'
     . get_string('imagelibrary_add', 'format_iccaformat') . '</button>';
 echo '</form>';
 
+$iccalibjs = [];
+foreach (['addtolib', 'addn', 'nfiles', 'visibleof', 'nselected', 'confirmdelete', 'dropfiles', 'browse'] as $iccalibkey) {
+    $iccalibjs[$iccalibkey] = get_string('imagelibrary_ui_' . $iccalibkey, 'format_iccaformat');
+}
+// Lang strings for this page's scripts. {$a} (or {$a->x}) is replaced in JS where used.
+echo '<script>var iccaLibStr = ' . json_encode($iccalibjs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';'
+    . 'function iccaLibBrowse() { var w = document.createElement("span"); w.appendChild(document.createTextNode(iccaLibStr.dropfiles + " "));'
+    . ' var b = document.createElement("span"); b.style.cssText = "color:#0d3c6f;text-decoration:underline;";'
+    . ' b.textContent = iccaLibStr.browse; w.appendChild(b); return w.innerHTML; }</script>';
 echo '<script>
 (function() {
     var nameInput = document.getElementById("libname_new");
@@ -464,7 +467,7 @@ echo '<script>
     var fileInput = document.getElementById("libfile_new");
     var fileLabel = document.getElementById("icca-file-label");
     var btn       = document.getElementById("icca-add-btn");
-    btn.textContent = "Add to library";
+    btn.textContent = iccaLibStr.addtolib;
 
     function setNameFromFile() {
         if (fileInput.files && fileInput.files.length === 1) {
@@ -483,25 +486,25 @@ echo '<script>
             nameLabel.style.display = "none";
             nameHint.style.display  = "block";
             nameInput.removeAttribute("required");
-            fileLabel.innerHTML = count + " files selected";
+            fileLabel.textContent = iccaLibStr.nfiles.replace("{$a}", count);
         } else if (count === 1) {
             nameInput.style.display = "";
             nameLabel.style.display = "";
             nameHint.style.display  = "none";
-            fileLabel.innerHTML = fileInput.files[0].name;
+            fileLabel.textContent = fileInput.files[0].name;
         } else {
             nameInput.style.display = "";
             nameLabel.style.display = "";
             nameHint.style.display  = "none";
             nameInput.value = "";
-            fileLabel.innerHTML = "Drop files here or <span style=\"color:#0d3c6f;text-decoration:underline;\">browse</span>";
+            fileLabel.innerHTML = iccaLibBrowse();
         }
 
         var ready = count > 0 && (multi || nameInput.value.trim() !== "");
         btn.disabled = !ready;
         btn.style.opacity = ready ? "1" : "0.5";
         btn.style.cursor  = ready ? "pointer" : "not-allowed";
-        btn.textContent   = multi ? "Add " + count + " images to library" : "Add to library";
+        btn.textContent   = multi ? iccaLibStr.addn.replace("{$a}", count) : iccaLibStr.addtolib;
     }
 
     nameInput.addEventListener("input", check);
@@ -532,7 +535,7 @@ function iccaLibFilter() {
         if (show) visible++;
     });
     var countEl = document.getElementById("icca-lib-count");
-    if (countEl) countEl.textContent = visible + " of " + tiles.length + " images";
+    if (countEl) countEl.textContent = iccaLibStr.visibleof.replace("{$a->visible}", visible).replace("{$a->total}", tiles.length);
 }
 window.addEventListener("load", function() { iccaLibFilter(); });
 </script>';
@@ -540,13 +543,12 @@ window.addEventListener("load", function() { iccaLibFilter(); });
 // Course view note.
 if ($courseid) {
     echo '<p class="icca-sidebar-note">'
-        . 'Images added here are only available to this course. Site-wide images are in the '
+        . get_string('imagelibrary_ui_coursenote', 'format_iccaformat') . ' '
         . '<a href="' . new moodle_url('/course/format/iccaformat/imagelibrary.php') . '">'
         . get_string('formatlibrary_site', 'format_iccaformat') . '</a>.'
         . '</p>';
-} else {
-    // Admin view — no sidebar note needed, button is at top.
 }
+// Admin view: no sidebar note needed, the button is at the top.
 
 echo '</div>'; // sidebar
 
@@ -559,10 +561,10 @@ echo '<input type="text" id="icca-lib-search" placeholder="Search by name..." on
     . ' style="border:1px solid #dee2e6;border-radius:6px;padding:6px 10px;font-size:1rem;flex:1;min-width:160px;">';
 echo '<label style="display:flex;align-items:center;gap:6px;font-size:1rem;cursor:pointer;white-space:nowrap;">'
     . '<input type="checkbox" id="icca-filter-label" checked onchange="iccaLibFilter()" style="accent-color:#0d3c6f;width:16px;height:16px;">'
-    . '<i class="fa fa-star" style="font-size:0.75rem;color:#0d3c6f;" aria-hidden="true"></i> Used in Card Styling Rule</label>';
+    . '<i class="fa fa-star" style="font-size:0.75rem;color:#0d3c6f;" aria-hidden="true"></i> ' . get_string('imagelibrary_ui_legend_rule', 'format_iccaformat') . '</label>';
 echo '<label style="display:flex;align-items:center;gap:6px;font-size:1rem;cursor:pointer;white-space:nowrap;">'
     . '<input type="checkbox" id="icca-filter-course" checked onchange="iccaLibFilter()" style="accent-color:#6c757d;width:16px;height:16px;">'
-    . '<i class="fa fa-graduation-cap" style="font-size:0.75rem;color:#6c757d;" aria-hidden="true"></i> Used in course</label>';
+    . '<i class="fa fa-graduation-cap" style="font-size:0.75rem;color:#6c757d;" aria-hidden="true"></i> ' . get_string('imagelibrary_ui_legend_course', 'format_iccaformat') . '</label>';
 echo '<span id="icca-lib-count" style="font-size:0.85rem;color:#adb5bd;margin-left:auto;"></span>';
 echo '</div>';
 
@@ -595,17 +597,17 @@ $editactionurl = new moodle_url('/course/format/iccaformat/imagelibrary.php',
     ['courseid' => $courseid, 'action' => 'edit', 'sesskey' => sesskey()]);
 echo '<div id="icca-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">';
 echo '<div style="background:#fff;border-radius:10px;padding:1.5rem;width:90%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">';
-echo '<h4 style="margin:0 0 1rem;font-size:1.1rem;">Edit image</h4>';
+echo '<h4 style="margin:0 0 1rem;font-size:1.1rem;">' . get_string('imagelibrary_ui_editimage', 'format_iccaformat') . '</h4>';
 echo '<form id="icca-edit-form" method="post" enctype="multipart/form-data" action="' . $editactionurl . '">';
 echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
 echo '<input type="hidden" id="icca-edit-imageid" name="imageid" value="">';
-echo '<label style="font-size:1rem;font-weight:500;display:block;margin-bottom:4px;">Name</label>';
+echo '<label style="font-size:1rem;font-weight:500;display:block;margin-bottom:4px;">' . get_string('name') . '</label>';
 echo '<input type="text" id="icca-edit-name" name="editname" style="width:100%;border:1px solid #dee2e6;border-radius:6px;padding:7px 10px;font-size:1rem;margin-bottom:1rem;" autocomplete="off">';
-echo '<label style="font-size:1rem;font-weight:500;display:block;margin-bottom:4px;">Replace image file <span style="font-size:0.85rem;color:#6c757d;font-weight:normal;">(optional)</span></label>';
+echo '<label style="font-size:1rem;font-weight:500;display:block;margin-bottom:4px;">' . get_string('imagelibrary_ui_replacefile', 'format_iccaformat') . ' <span style="font-size:0.85rem;color:#6c757d;font-weight:normal;">' . get_string('imagelibrary_ui_optional', 'format_iccaformat') . '</span></label>';
 echo '<input type="file" id="icca-edit-file" name="editfile" accept=".jpg,.jpeg,.png,.webp,.gif,.svg" style="width:100%;margin-bottom:1rem;">';
 echo '<div style="display:flex;gap:8px;justify-content:flex-end;">';
-echo '<button type="button" onclick="iccaCloseEdit()" style="padding:8px 16px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:1rem;cursor:pointer;">Cancel</button>';
-echo '<button type="submit" style="padding:8px 16px;background:#0d3c6f;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:500;">Save changes</button>';
+echo '<button type="button" onclick="iccaCloseEdit()" style="padding:8px 16px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:1rem;cursor:pointer;">' . get_string('cancel') . '</button>';
+echo '<button type="submit" style="padding:8px 16px;background:#0d3c6f;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:500;">' . get_string('savechanges') . '</button>';
 echo '</div>';
 echo '</form></div></div>';
 
@@ -655,7 +657,7 @@ function iccaUpdateBulkBar() {
         if (cb && !cb.checked) tile.classList.remove("selected");
     });
     if (bar) bar.style.display = checked.length > 0 ? "flex" : "none";
-    if (count) count.textContent = checked.length + " selected";
+    if (count) count.textContent = iccaLibStr.nselected.replace("{$a}", checked.length);
 }
 function iccaClearSelection() {
     document.querySelectorAll(".icca-tile-checkbox").forEach(function(cb){ cb.checked = false; });
@@ -665,7 +667,7 @@ function iccaClearSelection() {
 }
 function iccaBulkDeleteConfirm() {
     var count = document.querySelectorAll(".icca-tile-checkbox:checked").length;
-    return confirm("Delete " + count + " selected image(s)? This cannot be undone.");
+    return confirm(iccaLibStr.confirmdelete.replace("{$a}", count));
 }
 function iccaClearUpload() {
     var fileInput = document.getElementById("libfile_new");
@@ -674,8 +676,8 @@ function iccaClearUpload() {
     var btn       = document.getElementById("icca-add-btn");
     if (fileInput) fileInput.value = "";
     if (nameInput) nameInput.value = "";
-    if (fileLabel) fileLabel.innerHTML = "Drop files here or <span style=\"color:#0d3c6f;text-decoration:underline;\">browse</span>";
-    if (btn) { btn.disabled = true; btn.style.opacity = "0.5"; btn.style.cursor = "not-allowed"; btn.textContent = "Add to library"; }
+    if (fileLabel) fileLabel.innerHTML = iccaLibBrowse();
+    if (btn) { btn.disabled = true; btn.style.opacity = "0.5"; btn.style.cursor = "not-allowed"; btn.textContent = iccaLibStr.addtolib; }
 }
 function iccaOpenEdit(imgid, imgname) {
     document.getElementById("icca-edit-imageid").value = imgid;

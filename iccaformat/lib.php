@@ -94,6 +94,46 @@ class format_iccaformat extends core_courseformat\base {
      * Format uses sections.
      * @return bool
      */
+    /**
+     * Course deletion hook: remove this format's data for the course.
+     *
+     * Per-card options, the course's Card Styling Rules, and its course-level image
+     * library (records and files). Site-wide rules and images are untouched.
+     *
+     * @return void
+     */
+    public function delete_format_data() {
+        global $DB;
+        parent::delete_format_data();
+
+        $courseid = (int) $this->get_courseid();
+        \format_iccaformat\local\format_option::delete_course($courseid);
+        $DB->delete_records('iccaformat_label_rules', ['courseid' => $courseid]);
+
+        $context = \context_course::instance($courseid, IGNORE_MISSING);
+        if ($context) {
+            $ids = $DB->get_fieldset_select('iccaformat_image_library', 'id', 'contextid = ?', [$context->id]);
+            foreach ($ids as $id) {
+                \format_iccaformat\local\image_library::delete((int) $id);
+            }
+        }
+    }
+
+    /**
+     * Read an integer admin default, falling back when it has never been saved.
+     *
+     * get_config() returns false for an unsaved setting, which (int) would turn into 0 —
+     * so a "default on" option would silently start off. Treat false/'' as unset.
+     *
+     * @param  string $name     Setting name under format_iccaformat.
+     * @param  int    $fallback Value to use when the setting has never been saved.
+     * @return int
+     */
+    private static function config_default_int(string $name, int $fallback): int {
+        $value = get_config('format_iccaformat', $name);
+        return ($value === false || $value === '') ? $fallback : (int) $value;
+    }
+
     public function uses_sections(): bool {
         return true;
     }
@@ -338,6 +378,10 @@ class format_iccaformat extends core_courseformat\base {
                     'default' => (int) (get_config('format_iccaformat', 'default_showcoursemap') ?? 1),
                     'type'    => PARAM_INT,
                 ],
+                'coursemaplabels' => [
+                    'default' => self::config_default_int('default_coursemaplabels', 1),
+                    'type'    => PARAM_INT,
+                ],
                 // Card image object-fit.
                 'imageobjectfit' => [
                     'default' => get_config('format_iccaformat', 'default_imageobjectfit') ?: 'cover',
@@ -479,6 +523,16 @@ class format_iccaformat extends core_courseformat\base {
                         1 => get_string('showcoursemap_show', 'format_iccaformat'),
                         0 => get_string('showcoursemap_hide', 'format_iccaformat'),
                     ]],
+                ],
+                'coursemaplabels' => [
+                    'label'        => get_string('coursemaplabels', 'format_iccaformat'),
+                    'element_type' => 'select',
+                    'element_attributes' => [[
+                        1 => get_string('coursemaplabels_show', 'format_iccaformat'),
+                        0 => get_string('coursemaplabels_hide', 'format_iccaformat'),
+                    ]],
+                    'help'           => 'coursemaplabels',
+                    'help_component' => 'format_iccaformat',
                 ],
 
                 // Image defaults.
@@ -683,7 +737,6 @@ class format_iccaformat extends core_courseformat\base {
 
         if ($foreditform) {
 
-
             $imagepositionopts = [
                 ''             => get_string('coursesetting_default', 'format_iccaformat'),
                 'center'       => get_string('imageposition_center',      'format_iccaformat'),
@@ -753,7 +806,7 @@ class format_iccaformat extends core_courseformat\base {
                         'imagebackgroundcolour', 'borderradius', 'completionbarshowin',
                         'completionbarcolour', 'cardsize', 'hoverstyle', 'hoverzoom',
                         'footerfontsize', 'dropdownfontsize',
-                        'sectionprogbar', 'showactivitybar', 'showhomebutton', 'showcoursemap'];
+                        'sectionprogbar', 'showactivitybar', 'showhomebutton', 'showcoursemap', 'coursemaplabels'];
             foreach ($fields as $field) {
                 if (!empty($current[$field]) && $mform->elementExists($field)) {
                     $mform->getElement($field)->setValue($current[$field]);
@@ -787,8 +840,6 @@ class format_iccaformat extends core_courseformat\base {
             $js .= '});';
             $mform->addElement('html', '<script>' . $js . '</script>');
 
-
-
             // Build swatch pickers for filter and overlay and set as static element values.
             $coursesvg = '<svg width="88" height="58" viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg">'
                 . '<rect width="90" height="60" fill="#e8f4fc"/>'
@@ -798,19 +849,19 @@ class format_iccaformat extends core_courseformat\base {
                 . '<polygon points="50,52 65,32 80,52" fill="#388e3c"/>'
                 . '</svg>';
 
-            $coursefilteropts  = ['none' => get_string('imagefilter_none','format_iccaformat'), 'grayscale' => get_string('imagefilter_grayscale','format_iccaformat'), 'sepia' => get_string('imagefilter_sepia','format_iccaformat'), 'brighten' => get_string('imagefilter_brighten','format_iccaformat')];
+            $coursefilteropts  = ['none' => get_string('imagefilter_none', 'format_iccaformat'), 'grayscale' => get_string('imagefilter_grayscale', 'format_iccaformat'), 'sepia' => get_string('imagefilter_sepia', 'format_iccaformat'), 'brighten' => get_string('imagefilter_brighten', 'format_iccaformat')];
             $coursefiltercsses = ['none' => '', 'grayscale' => 'grayscale(100%)', 'sepia' => 'sepia(80%)', 'brighten' => 'brightness(135%)'];
-            $courseoverlayopts  = ['none' => get_string('imageoverlay_none','format_iccaformat'), 'light' => get_string('imageoverlay_light','format_iccaformat'), 'dark' => get_string('imageoverlay_dark','format_iccaformat')];
+            $courseoverlayopts  = ['none' => get_string('imageoverlay_none', 'format_iccaformat'), 'light' => get_string('imageoverlay_light', 'format_iccaformat'), 'dark' => get_string('imageoverlay_dark', 'format_iccaformat')];
             $courseoverlaycsses = ['none' => '', 'light' => 'background:rgba(255,255,255,0.4);', 'dark' => 'background:rgba(0,0,0,0.4);'];
-            $curfilter  = $current['imagefilter']  ?: 'none';
+            $curfilter  = $current['imagefilter'] ?: 'none';
             $curoverlay = $current['imageoverlay'] ?: 'none';
 
             // Replace filter/overlay selects with swatch pickers via JS.
             // The selects are already in the right position — JS hides them and
             // inserts swatch HTML immediately after, syncing back to the select on click.
-            $filteroptsjs  = json_encode(['none' => get_string('imagefilter_none','format_iccaformat'), 'grayscale' => get_string('imagefilter_grayscale','format_iccaformat'), 'sepia' => get_string('imagefilter_sepia','format_iccaformat'), 'brighten' => get_string('imagefilter_brighten','format_iccaformat')]);
+            $filteroptsjs  = json_encode(['none' => get_string('imagefilter_none', 'format_iccaformat'), 'grayscale' => get_string('imagefilter_grayscale', 'format_iccaformat'), 'sepia' => get_string('imagefilter_sepia', 'format_iccaformat'), 'brighten' => get_string('imagefilter_brighten', 'format_iccaformat')]);
             $filtercssjs   = json_encode(['none' => '', 'grayscale' => 'grayscale(100%)', 'sepia' => 'sepia(80%)', 'brighten' => 'brightness(135%)']);
-            $overlayoptsjs = json_encode(['none' => get_string('imageoverlay_none','format_iccaformat'), 'light' => get_string('imageoverlay_light','format_iccaformat'), 'dark' => get_string('imageoverlay_dark','format_iccaformat')]);
+            $overlayoptsjs = json_encode(['none' => get_string('imageoverlay_none', 'format_iccaformat'), 'light' => get_string('imageoverlay_light', 'format_iccaformat'), 'dark' => get_string('imageoverlay_dark', 'format_iccaformat')]);
             $overlaycssjs  = json_encode(['none' => '', 'light' => 'background:rgba(255,255,255,0.4);', 'dark' => 'background:rgba(0,0,0,0.4);']);
             $svgjs         = json_encode($coursesvg);
 
@@ -933,18 +984,18 @@ window.addEventListener("load", function() {
         // since getValue() can return an array before the form is submitted.
         $sectionid = optional_param('id', 0, PARAM_INT); // editsection.php passes ?id=sectionid
         $optioncache    = $sectionid ? \format_iccaformat\local\format_option::get_all_for_course($courseid) : [];
-        $currentsource  = \format_iccaformat\local\format_option::get_from_cache($optioncache, $sectionid, \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, '');
-        $currentimageid = (int) \format_iccaformat\local\format_option::get_from_cache($optioncache, $sectionid, \format_iccaformat\local\format_option::OPT_IMAGE_ID, 0);
-        $sec_iconenabled  = \format_iccaformat\local\format_option::get_from_cache($optioncache, $sectionid, \format_iccaformat\local\format_option::OPT_ICON_ENABLED, null);
-        $sec_labelenabled = \format_iccaformat\local\format_option::get_from_cache($optioncache, $sectionid, \format_iccaformat\local\format_option::OPT_LABEL_ENABLED, null);
-        $sec_labeloverride = \format_iccaformat\local\format_option::get_from_cache($optioncache, $sectionid, \format_iccaformat\local\format_option::OPT_LABEL_OVERRIDE, '');
-        $sec_iconoverride  = \format_iccaformat\local\format_option::get_from_cache($optioncache, $sectionid, \format_iccaformat\local\format_option::OPT_ICON_OVERRIDE, '');
+        $currentsource  = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, '');
+        $currentimageid = (int) \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, \format_iccaformat\local\format_option::OPT_IMAGE_ID, 0);
+        $seciconenabled  = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, \format_iccaformat\local\format_option::OPT_ICON_ENABLED, null);
+        $seclabelenabled = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, \format_iccaformat\local\format_option::OPT_LABEL_ENABLED, null);
+        $seclabeloverride = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, \format_iccaformat\local\format_option::OPT_LABEL_OVERRIDE, '');
+        $seciconoverride  = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, \format_iccaformat\local\format_option::OPT_ICON_OVERRIDE, '');
 
         // Force image display option values from element_options onto the section form selects.
         // Moodle renders these from section_format_options but reads defaults not element_options.
         $secdisplayfields = ['imageobjectfit', 'imageobjectposition', 'imagefilter', 'imageoverlay', 'imagebackgroundcolour'];
         foreach ($secdisplayfields as $field) {
-            $val = \format_iccaformat\local\format_option::get_from_cache($optioncache, $sectionid, $field, '');
+            $val = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, $field, '');
             if ($val !== '' && $mform->elementExists($field)) {
                 $mform->getElement($field)->setValue($val);
             }
@@ -1171,7 +1222,7 @@ window.addEventListener("load", function() {
         $mform->setType('iccaformat_sec_imageid', PARAM_INT);
         $elements[] = $mform->addElement('filepicker', 'iccaformat_sec_imagefile',
             get_string('card_image_source_upload', 'format_iccaformat'), null,
-            ['maxbytes' => 5 * 1024 * 1024, 'accepted_types' => ['.jpg','.jpeg','.png','.webp','.gif','.svg']]);
+            ['maxbytes' => 5 * 1024 * 1024, 'accepted_types' => ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg']]);
         $mform->setDefault('iccaformat_sec_imagefile', $draftitemid);
 
         // ── Filter and overlay swatch pickers ─────────────────────────────
@@ -1209,9 +1260,9 @@ window.addEventListener("load", function() {
         ];
 
         $secfilterval  = \format_iccaformat\local\format_option::get_from_cache(
-            $optioncache, $sectionid, 'imagefilter', '');
+            $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, 'imagefilter', '');
         $secoverlayval = \format_iccaformat\local\format_option::get_from_cache(
-            $optioncache, $sectionid, 'imageoverlay', '');
+            $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, 'imageoverlay', '');
 
         $elements[] = $mform->addElement('static', 'imagefilter_swatches',
             get_string('imagefilter', 'format_iccaformat'),
@@ -1250,12 +1301,12 @@ window.addEventListener("load", function() {
 
         // Card overrides — unlock pattern.
         // Each field only stores a value when explicitly overridden.
-        $sec_icon_overridden   = ($sec_iconenabled !== null);
-        $sec_label_overridden  = ($sec_labelenabled !== null);
-        $sec_cicon_overridden  = ($sec_iconoverride !== '');
-        $sec_clabel_overridden = ($sec_labeloverride !== '');
-        $sec_flipped           = \format_iccaformat\local\format_option::get_from_cache($optioncache, $sectionid, \format_iccaformat\local\format_option::OPT_ICON_LABEL_FLIPPED, null);
-        $sec_flip_overridden   = ($sec_flipped !== null);
+        $seciconoverridden   = ($seciconenabled !== null);
+        $seclabeloverridden  = ($seclabelenabled !== null);
+        $secciconoverridden  = ($seciconoverride !== '');
+        $secclabeloverridden = ($seclabeloverride !== '');
+        $secflipped           = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sectionid, \format_iccaformat\local\format_option::OPT_ICON_LABEL_FLIPPED, null);
+        $secflipoverridden   = ($secflipped !== null);
 
         $explainer = '<div style="margin-top:8px;">'
             . '<span style="font-size:1rem;font-weight:500;color:#495057;">'
@@ -1265,25 +1316,25 @@ window.addEventListener("load", function() {
             . '</div>';
         $overridejs = iccaformat_build_override_js('sec');
         $overridehtml = iccaformat_build_override_html('sec', [
-            'icon'         => ['label' => get_string('card_icon_enabled',    'format_iccaformat'), 'type' => 'showhide',  'overridden' => $sec_icon_overridden,   'val' => $sec_iconenabled ?? '1',    'ovr_field' => 'iccaformat_sec_icon_enabled_override',  'val_field' => 'iccaformat_sec_icon_enabled'],
-            'label'        => ['label' => get_string('card_label_enabled',   'format_iccaformat'), 'type' => 'showhide',  'overridden' => $sec_label_overridden,  'val' => $sec_labelenabled ?? '1',   'ovr_field' => 'iccaformat_sec_label_enabled_override', 'val_field' => 'iccaformat_sec_label_enabled'],
-            'customicon'   => ['label' => get_string('card_icon_override',   'format_iccaformat'), 'type' => 'text',      'overridden' => $sec_cicon_overridden,  'val' => $sec_iconoverride,          'ovr_field' => 'iccaformat_sec_cicon_override_set',     'val_field' => 'iccaformat_sec_icon_override'],
-            'customlabel'  => ['label' => get_string('card_label_override',  'format_iccaformat'), 'type' => 'text',      'overridden' => $sec_clabel_overridden, 'val' => $sec_labeloverride,         'ovr_field' => 'iccaformat_sec_clabel_override_set',    'val_field' => 'iccaformat_sec_label_override'],
-            'flipped'      => ['label' => get_string('card_flip',            'format_iccaformat'), 'type' => 'showhide',  'overridden' => $sec_flip_overridden,   'val' => $sec_flipped ?? '0',        'ovr_field' => 'iccaformat_sec_flip_override_set',      'val_field' => 'iccaformat_sec_flipped',        'poslabel' => 'Yes', 'neglabel' => 'No'],
+            'icon'         => ['label' => get_string('card_icon_enabled',    'format_iccaformat'), 'type' => 'showhide',  'overridden' => $seciconoverridden,   'val' => $seciconenabled ?? '1',    'ovr_field' => 'iccaformat_sec_icon_enabled_override',  'val_field' => 'iccaformat_sec_icon_enabled'],
+            'label'        => ['label' => get_string('card_label_enabled',   'format_iccaformat'), 'type' => 'showhide',  'overridden' => $seclabeloverridden,  'val' => $seclabelenabled ?? '1',   'ovr_field' => 'iccaformat_sec_label_enabled_override', 'val_field' => 'iccaformat_sec_label_enabled'],
+            'customicon'   => ['label' => get_string('card_icon_override',   'format_iccaformat'), 'type' => 'icon',      'overridden' => $secciconoverridden,  'val' => $seciconoverride,          'ovr_field' => 'iccaformat_sec_cicon_override_set',     'val_field' => 'iccaformat_sec_icon_override'],
+            'customlabel'  => ['label' => get_string('card_label_override',  'format_iccaformat'), 'type' => 'text',      'overridden' => $secclabeloverridden, 'val' => $seclabeloverride,         'ovr_field' => 'iccaformat_sec_clabel_override_set',    'val_field' => 'iccaformat_sec_label_override'],
+            'flipped'      => ['label' => get_string('card_flip',            'format_iccaformat'), 'type' => 'showhide',  'overridden' => $secflipoverridden,   'val' => $secflipped ?? '0',        'ovr_field' => 'iccaformat_sec_flip_override_set',      'val_field' => 'iccaformat_sec_flipped',        'poslabel' => 'Yes', 'neglabel' => 'No'],
         ]);
         $elements[] = $mform->addElement('static', 'iccaformat_sec_overrides', '', $explainer . $overridehtml . $overridejs);
 
         // Register hidden fields with Moodle so they pass through form submission.
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_icon_enabled_override',  $sec_icon_overridden  ? '1' : '');
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_label_enabled_override', $sec_label_overridden ? '1' : '');
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_cicon_override_set',     $sec_cicon_overridden  ? '1' : '');
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_clabel_override_set',    $sec_clabel_overridden ? '1' : '');
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_flip_override_set',      $sec_flip_overridden  ? '1' : '');
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_icon_enabled',   $sec_iconenabled  ?? '');
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_label_enabled',  $sec_labelenabled ?? '');
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_icon_override',  $sec_iconoverride);
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_label_override', $sec_labeloverride);
-        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_flipped',        $sec_flipped ?? '');
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_icon_enabled_override',  $seciconoverridden ? '1' : '');
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_label_enabled_override', $seclabeloverridden ? '1' : '');
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_cicon_override_set',     $secciconoverridden ? '1' : '');
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_clabel_override_set',    $secclabeloverridden ? '1' : '');
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_flip_override_set',      $secflipoverridden ? '1' : '');
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_icon_enabled',   $seciconenabled ?? '');
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_label_enabled',  $seclabelenabled ?? '');
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_icon_override',  $seciconoverride);
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_label_override', $seclabeloverride);
+        $elements[] = $mform->addElement('hidden', 'iccaformat_sec_flipped',        $secflipped ?? '');
         foreach (['iccaformat_sec_icon_enabled_override', 'iccaformat_sec_label_enabled_override',
                   'iccaformat_sec_cicon_override_set', 'iccaformat_sec_clabel_override_set',
                   'iccaformat_sec_flip_override_set',
@@ -1292,7 +1343,6 @@ window.addEventListener("load", function() {
                   'iccaformat_sec_flipped'] as $fname) {
             $mform->setType($fname, PARAM_TEXT);
         }
-
 
         return $elements;
     }
@@ -1352,7 +1402,7 @@ window.addEventListener("load", function() {
                 if (!empty($draftfiles)) {
                     $draftfile = reset($draftfiles);
                     $mimetype  = $draftfile->get_mimetype();
-                    $accepted  = ['image/jpeg','image/png','image/webp','image/gif','image/svg+xml'];
+                    $accepted  = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
 
                     if (in_array($mimetype, $accepted)) {
                         $imgname = pathinfo($draftfile->get_filename(), PATHINFO_FILENAME);
@@ -1405,10 +1455,10 @@ window.addEventListener("load", function() {
         $validfilter   = ['', 'none', 'grayscale', 'sepia', 'brighten'];
         $validoverlay  = ['', 'none', 'light', 'dark'];
 
-        $fit      = $dataarray['imageobjectfit']      ?? '';
+        $fit      = $dataarray['imageobjectfit'] ?? '';
         $position = $dataarray['imageobjectposition'] ?? '';
-        $filter   = $dataarray['imagefilter']         ?? '';
-        $overlay  = $dataarray['imageoverlay']        ?? '';
+        $filter   = $dataarray['imagefilter'] ?? '';
+        $overlay  = $dataarray['imageoverlay'] ?? '';
         $bgcolour = trim($dataarray['imagebackgroundcolour'] ?? '');
 
         if (in_array($fit, $validfit)) {
@@ -1460,7 +1510,7 @@ window.addEventListener("load", function() {
 
         // Save custom label and icon overrides — only if non-empty.
         $labeloverride = trim($dataarray['iccaformat_sec_label_override'] ?? '');
-        $iconoverride  = trim($dataarray['iccaformat_sec_icon_override']  ?? '');
+        $iconoverride  = trim($dataarray['iccaformat_sec_icon_override'] ?? '');
         if ($labeloverride !== '') {
             \format_iccaformat\local\format_option::set($courseid, $etype, $sectionid,
                 \format_iccaformat\local\format_option::OPT_LABEL_OVERRIDE, $labeloverride);
@@ -1521,18 +1571,21 @@ function iccaformat_build_override_html(string $prefix, array $fields): string {
         $val      = htmlspecialchars($f['val'] ?? '', ENT_QUOTES);
         $label    = htmlspecialchars($f['label'], ENT_QUOTES);
         $expanded = $f['overridden'] ? 'block' : 'none';
-        $ovr_name = $f['ovr_field'];
-        $val_name = $f['val_field'];
+        $ovrname = $f['ovr_field'];
+        $valname = $f['val_field'];
 
-        $html .= '<div style="border:0.5px solid rgba(0,0,0,0.12);border-radius:6px;overflow:hidden;">';
-        $html .= '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f8f9fa;">';
+        // The icon picker's dropdown must be able to extend past this box, so that row
+        // rounds its own corners instead of clipping with overflow:hidden.
+        $clip = ($type === 'icon') ? '' : 'overflow:hidden;';
+        $html .= '<div style="border:0.5px solid rgba(0,0,0,0.12);border-radius:6px;' . $clip . '">';
+        $html .= '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f8f9fa;border-radius:6px 6px 0 0;">';
         $html .= '<span style="font-size:1rem;color:#495057;">' . $label . '</span>';
         $html .= '<label style="display:flex;align-items:center;gap:5px;font-size:0.9rem;color:#6c757d;cursor:pointer;margin:0;">';
         $html .= '<input type="checkbox" id="' . $id . '_chk" ' . $checked
-            . ' onchange="iccaOvrToggle(\'' . $id . '\',\'' . $ovr_name . '\',\'' . $val_name . '\')"'
+            . ' onchange="iccaOvrToggle(\'' . $id . '\',\'' . $ovrname . '\',\'' . $valname . '\')"'
             . ' style="accent-color:#0d3c6f;width:14px;height:14px;"> Override</label>';
         $html .= '</div>';
-        $html .= '<div id="' . $id . '_panel" style="display:' . $expanded . ';padding:8px 10px;background:#fff;border-top:0.5px solid rgba(0,0,0,0.08);">';
+        $html .= '<div id="' . $id . '_panel" style="display:' . $expanded . ';padding:8px 10px;background:#fff;border-top:0.5px solid rgba(0,0,0,0.08);border-radius:0 0 6px 6px;">';
 
         if ($type === 'showhide') {
             $showchk   = ($val === '1' || $val === '') ? 'checked' : '';
@@ -1541,13 +1594,17 @@ function iccaformat_build_override_html(string $prefix, array $fields): string {
             $neglabel  = $f['neglabel'] ?? 'Hide';
             $html .= '<label style="display:inline-flex;align-items:center;gap:5px;font-size:1rem;margin-right:16px;cursor:pointer;">'
                 . '<input type="radio" name="' . $id . '_radio" value="1" ' . $showchk
-                . ' onchange="iccaOvrSyncVal(\'' . $val_name . '\', \'1\')" style="accent-color:#0d3c6f;"> ' . $poslabel . '</label>';
+                . ' onchange="iccaOvrSyncVal(\'' . $valname . '\', \'1\')" style="accent-color:#0d3c6f;"> ' . $poslabel . '</label>';
             $html .= '<label style="display:inline-flex;align-items:center;gap:5px;font-size:1rem;cursor:pointer;">'
                 . '<input type="radio" name="' . $id . '_radio" value="0" ' . $hidechk
-                . ' onchange="iccaOvrSyncVal(\'' . $val_name . '\', \'0\')" style="accent-color:#0d3c6f;"> ' . $neglabel . '</label>';
+                . ' onchange="iccaOvrSyncVal(\'' . $valname . '\', \'0\')" style="accent-color:#0d3c6f;"> ' . $neglabel . '</label>';
+        } else if ($type === 'icon') {
+            // Same picker as Card Styling Rules; keeps the submitted hidden field in step.
+            $html .= \format_iccaformat\local\icon_picker::field_html((string) ($f['val'] ?? ''), '', $valname,
+                ['input' => $id . '_text']);
         } else {
             $html .= '<input type="text" id="' . $id . '_text" value="' . $val . '" autocomplete="off"'
-                . ' oninput="iccaOvrSyncVal(\'' . $val_name . '\', this.value)"'
+                . ' oninput="iccaOvrSyncVal(\'' . $valname . '\', this.value)"'
                 . ' style="width:100%;border:1px solid #dee2e6;border-radius:4px;padding:5px 8px;font-size:1rem;">';
         }
 
@@ -1587,7 +1644,8 @@ function iccaOvrSyncVal(valName, val) {
  * File areas handled:
  *   library_image  — images from iccaformat_image_library (system or course context).
  *                    Access: any logged-in user (images are decorative, not sensitive).
- *   element_image  — direct-upload images for individual sections/activities.
+ *   element_image  — direct-upload images for individual sections/subsections (itemid = section id).
+ *   cm_image       — direct-upload images for individual activities (itemid = cmid).
  *                    Access: must be enrolled in the course (course context).
  *
  * @param stdClass $course        Course record.
@@ -1621,8 +1679,10 @@ function format_iccaformat_pluginfile($course, $cm, $context, $filearea, $args, 
         return;
     }
 
-    // Element images: served only to users enrolled in the course.
-    if ($filearea === 'element_image') {
+    // Element images (sections: element_image, activities: cm_image): served only to
+    // users who can access the course.
+    if ($filearea === \format_iccaformat\local\format_option::FILEAREA_SECTION
+            || $filearea === \format_iccaformat\local\format_option::FILEAREA_CM) {
         require_login($course);
 
         $coursecontext = \context_course::instance($course->id);
@@ -1631,7 +1691,7 @@ function format_iccaformat_pluginfile($course, $cm, $context, $filearea, $args, 
         $filepath = $args ? '/' . implode('/', $args) . '/' : '/';
 
         $fs   = get_file_storage();
-        $file = $fs->get_file($coursecontext->id, 'format_iccaformat', 'element_image', $itemid, $filepath, $filename);
+        $file = $fs->get_file($coursecontext->id, 'format_iccaformat', $filearea, $itemid, $filepath, $filename);
 
         if (!$file || $file->is_directory()) {
             return false;
@@ -1776,7 +1836,6 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
         return;
     }
 
-
     $courseid = $course->id;
     // $cm->id is the module instance id, NOT the course module id.
     // $cm->coursemodule is the actual cmid (matches mdl_course_modules.id).
@@ -1784,17 +1843,17 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
 
     // Load existing options if editing an existing cm.
     $optioncache    = $cmid ? \format_iccaformat\local\format_option::get_all_for_course($courseid) : [];
-    $currentsource  = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currentsource  = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, '');
-    $currentimageid = (int) \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currentimageid = (int) \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         \format_iccaformat\local\format_option::OPT_IMAGE_ID, 0);
-    $currentlabel   = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currentlabel   = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         \format_iccaformat\local\format_option::OPT_LABEL_OVERRIDE, '');
-    $currenticon    = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currenticon    = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         \format_iccaformat\local\format_option::OPT_ICON_OVERRIDE, '');
-    $iconenabled    = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $iconenabled    = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         \format_iccaformat\local\format_option::OPT_ICON_ENABLED, null); // null = not set, inherit from rule
-    $labelenabled   = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $labelenabled   = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         \format_iccaformat\local\format_option::OPT_LABEL_ENABLED, null); // null = not set, inherit from rule
 
     // Load library images for picker — split into course and Format library.
@@ -1818,11 +1877,11 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
             $coursecontext = \context_course::instance($courseid);
             $fs2 = get_file_storage();
             $existing = $fs2->get_area_files($coursecontext->id, 'format_iccaformat',
-                'element_image', $cmid, 'itemid', false);
+                \format_iccaformat\local\format_option::FILEAREA_CM, $cmid, 'itemid', false);
             if (!empty($existing)) {
                 $existingfile = reset($existing);
                 $previewurl = \moodle_url::make_pluginfile_url(
-                    $coursecontext->id, 'format_iccaformat', 'element_image',
+                    $coursecontext->id, 'format_iccaformat', \format_iccaformat\local\format_option::FILEAREA_CM,
                     $cmid, '/', $existingfile->get_filename()
                 )->out(false);
             }
@@ -1851,7 +1910,7 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
     if ($cmid) {
         file_prepare_draft_area($draftitemid,
             \context_course::instance($courseid)->id,
-            'format_iccaformat', 'element_image', $cmid,
+            'format_iccaformat', \format_iccaformat\local\format_option::FILEAREA_CM, $cmid,
             ['maxbytes' => 5 * 1024 * 1024, 'maxfiles' => 1]
         );
     }
@@ -2070,13 +2129,13 @@ window.addEventListener("load", function() {
 
     // ── Description display ───────────────────────────────────────────────
     // ── Image display options ─────────────────────────────────────────────
-    $currentobjectfit      = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currentobjectfit      = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         'imageobjectfit', '');
-    $currentobjectposition = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currentobjectposition = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         'imageobjectposition', '');
-    $currentimagefilter    = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currentimagefilter    = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         'imagefilter', '');
-    $currentimageoverlay   = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currentimageoverlay   = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         'imageoverlay', '');
 
     $mform->addElement('select', 'iccaformat_imageobjectfit',
@@ -2160,7 +2219,7 @@ window.addEventListener("load", function() {
     $mform->addElement('hidden', 'iccaformat_imageoverlay', $currentimageoverlay);
     $mform->setType('iccaformat_imageoverlay', PARAM_ALPHA);
 
-    $currentbgcolour = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid,
+    $currentbgcolour = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid,
         'imagebackgroundcolour', '');
     if ($currentbgcolour === '') {
         $courseformatoptions = $course ? course_get_format($course)->get_format_options() : [];
@@ -2231,12 +2290,12 @@ window.addEventListener("load", function() {
     $mform->setType('iccaformat_imagebackgroundcolour', PARAM_TEXT);
 
     // Card overrides — unlock pattern.
-    $icon_overridden   = ($iconenabled !== null);
-    $label_overridden  = ($labelenabled !== null);
-    $cicon_overridden  = ($currenticon !== '');
-    $clabel_overridden = ($currentlabel !== '');
-    $flippedopt        = \format_iccaformat\local\format_option::get_from_cache($optioncache, $cmid, \format_iccaformat\local\format_option::OPT_ICON_LABEL_FLIPPED, null);
-    $flip_overridden   = ($flippedopt !== null);
+    $iconoverridden   = ($iconenabled !== null);
+    $labeloverridden  = ($labelenabled !== null);
+    $ciconoverridden  = ($currenticon !== '');
+    $clabeloverridden = ($currentlabel !== '');
+    $flippedopt        = \format_iccaformat\local\format_option::get_from_cache($optioncache, \format_iccaformat\local\format_option::ELEMENT_CM, $cmid, \format_iccaformat\local\format_option::OPT_ICON_LABEL_FLIPPED, null);
+    $flipoverridden   = ($flippedopt !== null);
 
     $explainer = '<div style="margin-top:8px;">'
         . '<span style="font-size:1rem;font-weight:500;color:#495057;">'
@@ -2245,23 +2304,23 @@ window.addEventListener("load", function() {
         . get_string('card_overrides_explainer_desc', 'format_iccaformat') . '</p>'
         . '</div>';
     $overridehtml = iccaformat_build_override_html('cm', [
-        'icon'        => ['label' => get_string('card_icon_enabled',   'format_iccaformat'), 'type' => 'showhide', 'overridden' => $icon_overridden,   'val' => $iconenabled  ?? '1', 'ovr_field' => 'iccaformat_icon_enabled_override',  'val_field' => 'iccaformat_icon_enabled'],
-        'label'       => ['label' => get_string('card_label_enabled',  'format_iccaformat'), 'type' => 'showhide', 'overridden' => $label_overridden,  'val' => $labelenabled ?? '1', 'ovr_field' => 'iccaformat_label_enabled_override', 'val_field' => 'iccaformat_label_enabled'],
-        'customicon'  => ['label' => get_string('card_icon_override',  'format_iccaformat'), 'type' => 'text',     'overridden' => $cicon_overridden,  'val' => $currenticon,         'ovr_field' => 'iccaformat_cicon_override_set',     'val_field' => 'iccaformat_icon_override'],
-        'customlabel' => ['label' => get_string('card_label_override', 'format_iccaformat'), 'type' => 'text',     'overridden' => $clabel_overridden, 'val' => $currentlabel,        'ovr_field' => 'iccaformat_clabel_override_set',    'val_field' => 'iccaformat_label_override'],
-        'flipped'     => ['label' => get_string('card_flip',           'format_iccaformat'), 'type' => 'showhide', 'overridden' => $flip_overridden,   'val' => $flippedopt ?? '0',   'ovr_field' => 'iccaformat_flip_override_set',      'val_field' => 'iccaformat_flipped',     'poslabel' => 'Yes', 'neglabel' => 'No'],
+        'icon'        => ['label' => get_string('card_icon_enabled',   'format_iccaformat'), 'type' => 'showhide', 'overridden' => $iconoverridden,   'val' => $iconenabled ?? '1', 'ovr_field' => 'iccaformat_icon_enabled_override',  'val_field' => 'iccaformat_icon_enabled'],
+        'label'       => ['label' => get_string('card_label_enabled',  'format_iccaformat'), 'type' => 'showhide', 'overridden' => $labeloverridden,  'val' => $labelenabled ?? '1', 'ovr_field' => 'iccaformat_label_enabled_override', 'val_field' => 'iccaformat_label_enabled'],
+        'customicon'  => ['label' => get_string('card_icon_override',  'format_iccaformat'), 'type' => 'icon',     'overridden' => $ciconoverridden,  'val' => $currenticon,         'ovr_field' => 'iccaformat_cicon_override_set',     'val_field' => 'iccaformat_icon_override'],
+        'customlabel' => ['label' => get_string('card_label_override', 'format_iccaformat'), 'type' => 'text',     'overridden' => $clabeloverridden, 'val' => $currentlabel,        'ovr_field' => 'iccaformat_clabel_override_set',    'val_field' => 'iccaformat_label_override'],
+        'flipped'     => ['label' => get_string('card_flip',           'format_iccaformat'), 'type' => 'showhide', 'overridden' => $flipoverridden,   'val' => $flippedopt ?? '0',   'ovr_field' => 'iccaformat_flip_override_set',      'val_field' => 'iccaformat_flipped',     'poslabel' => 'Yes', 'neglabel' => 'No'],
     ]);
     $overridejs = iccaformat_build_override_js('cm');
     $mform->addElement('static', 'iccaformat_overrides', '', $explainer . $overridehtml . $overridejs);
 
     // Register hidden fields with Moodle so they pass through form submission.
     // Values initialised from stored options — JS updates them when UI changes.
-    $mform->addElement('hidden', 'iccaformat_icon_enabled_override',  $icon_overridden  ? '1' : '');
-    $mform->addElement('hidden', 'iccaformat_label_enabled_override', $label_overridden ? '1' : '');
-    $mform->addElement('hidden', 'iccaformat_cicon_override_set',     $cicon_overridden  ? '1' : '');
-    $mform->addElement('hidden', 'iccaformat_clabel_override_set',    $clabel_overridden ? '1' : '');
-    $mform->addElement('hidden', 'iccaformat_flip_override_set',      $flip_overridden  ? '1' : '');
-    $mform->addElement('hidden', 'iccaformat_icon_enabled',   $iconenabled  ?? '');
+    $mform->addElement('hidden', 'iccaformat_icon_enabled_override',  $iconoverridden ? '1' : '');
+    $mform->addElement('hidden', 'iccaformat_label_enabled_override', $labeloverridden ? '1' : '');
+    $mform->addElement('hidden', 'iccaformat_cicon_override_set',     $ciconoverridden ? '1' : '');
+    $mform->addElement('hidden', 'iccaformat_clabel_override_set',    $clabeloverridden ? '1' : '');
+    $mform->addElement('hidden', 'iccaformat_flip_override_set',      $flipoverridden ? '1' : '');
+    $mform->addElement('hidden', 'iccaformat_icon_enabled',   $iconenabled ?? '');
     $mform->addElement('hidden', 'iccaformat_label_enabled',  $labelenabled ?? '');
     $mform->addElement('hidden', 'iccaformat_icon_override',  $currenticon);
     $mform->addElement('hidden', 'iccaformat_label_override', $currentlabel);
@@ -2273,7 +2332,6 @@ window.addEventListener("load", function() {
               'iccaformat_icon_override', 'iccaformat_label_override', 'iccaformat_flipped'] as $fname) {
         $mform->setType($fname, PARAM_TEXT);
     }
-
 
 }
 
@@ -2293,9 +2351,6 @@ function format_iccaformat_coursemodule_edit_post_actions($data, $course): stdCl
     if ($course->format !== 'iccaformat') {
         return $data;
     }
-
-
-
 
     $cmid      = (int) $data->coursemodule;
     $courseid  = (int) $course->id;
@@ -2335,26 +2390,27 @@ function format_iccaformat_coursemodule_edit_post_actions($data, $course): stdCl
                             \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'library');
                         \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
                             \format_iccaformat\local\format_option::OPT_IMAGE_ID, $newlibid);
-                        // Clean up any old element_image file.
-                        $fs->delete_area_files($context->id, 'format_iccaformat', 'element_image', $cmid);
+                        // Clean up any old direct-upload file for this activity.
+                        $fs->delete_area_files($context->id, 'format_iccaformat',
+                            \format_iccaformat\local\format_option::FILEAREA_CM, $cmid);
                     }
                 }
             }
         }
 
-        } else if ($imagesource === 'none') {
+    } else if ($imagesource === 'none') {
         // Explicit no image — suppress default too.
         \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
-            \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'none');
+        \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'none');
         \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
-            \format_iccaformat\local\format_option::OPT_IMAGE_ID, 0);
+        \format_iccaformat\local\format_option::OPT_IMAGE_ID, 0);
 
-        } else {
+    } else {
         // 'default' or '' — use default from rule.
         \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
-            \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'default');
+        \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'default');
         \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
-            \format_iccaformat\local\format_option::OPT_IMAGE_ID, 0);
+        \format_iccaformat\local\format_option::OPT_IMAGE_ID, 0);
     }
 
     // ── Description display ──────────────────────────────────────────────────
@@ -2371,10 +2427,10 @@ function format_iccaformat_coursemodule_edit_post_actions($data, $course): stdCl
     $validfilter   = ['', 'none', 'grayscale', 'sepia', 'brighten'];
     $validoverlay  = ['', 'none', 'light', 'dark'];
 
-    $objectfit      = $data->iccaformat_imageobjectfit      ?? '';
+    $objectfit      = $data->iccaformat_imageobjectfit ?? '';
     $objectposition = $data->iccaformat_imageobjectposition ?? '';
-    $imagefilter    = $data->iccaformat_imagefilter         ?? '';
-    $imageoverlay   = $data->iccaformat_imageoverlay        ?? '';
+    $imagefilter    = $data->iccaformat_imagefilter ?? '';
+    $imageoverlay   = $data->iccaformat_imageoverlay ?? '';
 
     if (in_array($objectfit, $validfit)) {
         \format_iccaformat\local\format_option::set($courseid, $etype, $cmid, 'imageobjectfit', $objectfit);
@@ -2396,7 +2452,7 @@ function format_iccaformat_coursemodule_edit_post_actions($data, $course): stdCl
 
     // ── Label and icon — unlock pattern ──────────────────────────────────────
     $label = trim($data->iccaformat_label_override ?? '');
-    $icon  = trim($data->iccaformat_icon_override  ?? '');
+    $icon  = trim($data->iccaformat_icon_override ?? '');
 
     // Icon enabled — only save if override is explicitly set.
     if (!empty($data->iccaformat_icon_enabled_override)) {

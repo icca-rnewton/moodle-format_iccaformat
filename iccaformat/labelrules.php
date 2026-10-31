@@ -62,32 +62,8 @@ $PAGE->set_pagelayout($courseid ? 'incourse' : 'admin');
 $PAGE->set_title($pagetitle);
 $PAGE->set_heading($courseid ? $course->fullname : get_string('labelrules_site', 'format_iccaformat'));
 
-// Default site-level rules shipped with the format.
-$defaultrules = [
-    'quiz'        => ['label' => 'Assessment',   'icon' => 'fa-check-square-o'],
-    'subsection'  => ['label' => 'Subsection',    'icon' => 'fa-layer-group'],
-    'section'     => ['label' => 'Section',       'icon' => 'numeric'],
-    'assign'      => ['label' => 'Assignment',   'icon' => 'fa-pencil-square-o'],
-    'page'        => ['label' => 'Reading',      'icon' => 'fa-file-text-o'],
-    'url'         => ['label' => 'Link',         'icon' => 'fa-link'],
-    'resource'    => ['label' => 'File',         'icon' => 'fa-file-o'],
-    'forum'       => ['label' => 'Discussion',   'icon' => 'fa-comments-o'],
-    'scorm'       => ['label' => 'Course',       'icon' => 'fa-play-circle-o'],
-    'h5pactivity' => ['label' => 'Interactive',  'icon' => 'fa-hand-pointer-o'],
-    'lesson'      => ['label' => 'Lesson',       'icon' => 'fa-graduation-cap'],
-    'workshop'    => ['label' => 'Workshop',     'icon' => 'fa-users'],
-    'choice'      => ['label' => 'Choice',       'icon' => 'fa-question-circle-o'],
-    'feedback'    => ['label' => 'Feedback',     'icon' => 'fa-comment-o'],
-    'glossary'    => ['label' => 'Glossary',     'icon' => 'fa-book'],
-    'book'        => ['label' => 'Guide',        'icon' => 'fa-book'],
-    'lti'         => ['label' => 'External',     'icon' => 'fa-external-link'],
-    'folder'      => ['label' => 'Folder',       'icon' => 'fa-folder-o'],
-    'wiki'        => ['label' => 'Wiki',         'icon' => 'fa-pencil'],
-    'data'        => ['label' => 'Database',     'icon' => 'fa-database'],
-    'dataform'    => ['label' => 'Data Form',    'icon' => 'fa-wpforms'],
-    'cpdrecord'   => ['label' => 'CPD Record',   'icon' => 'fa-cube'],
-    'groupmembers'=> ['label' => 'Groups',       'icon' => 'fa-group'],
-];
+// Default site-level rules shipped with the format (shared with the install step).
+$defaultrules = \format_iccaformat\local\defaults::rules();
 
 $selfurl = new moodle_url('/course/format/iccaformat/labelrules.php', ['courseid' => $courseid]);
 
@@ -107,8 +83,24 @@ if ($action === 'save' && confirm_sesskey()) {
     $iconenabled    = optional_param('icon_enabled',  0, PARAM_INT);
     $labelenabled   = optional_param('label_enabled', 0, PARAM_INT);
     $flipped        = optional_param('flipped', 0, PARAM_INT);
-    $image_hidden   = optional_param('image_hidden', 0, PARAM_INT);
+    $imagehidden   = optional_param('image_hidden', 0, PARAM_INT);
     $libraryimageid = optional_param('libraryimageid', 0, PARAM_INT);
+
+    // The browser's maxlength is only a convenience: enforce column lengths here.
+    $label = core_text::substr(trim($label), 0, 100);
+    $icon  = core_text::substr(trim($icon), 0, 100);
+
+    // A chosen image must be one this page can offer: site-wide, or this course's library.
+    if ($libraryimageid) {
+        $allowedctx = [(int) context_system::instance()->id];
+        if ($scopeid !== 0) {
+            $allowedctx[] = (int) context_course::instance($scopeid)->id;
+        }
+        $img = \format_iccaformat\local\image_library::get($libraryimageid);
+        if (!$img || !in_array((int) $img->contextid, $allowedctx, true)) {
+            $libraryimageid = 0;
+        }
+    }
 
     // If a new image was uploaded, save it to the appropriate library first.
     if (!empty($_FILES['rule_imageupload']['tmp_name']) && $_FILES['rule_imageupload']['error'] === UPLOAD_ERR_OK) {
@@ -144,7 +136,7 @@ if ($action === 'save' && confirm_sesskey()) {
         'label_enabled'  => $labelenabled ? 1 : 0,
         'icon_enabled'   => $iconenabled ? 1 : 0,
         'flipped'        => $flipped ? 1 : 0,
-        'image_hidden'   => $image_hidden ? 1 : 0,
+        'image_hidden'   => $imagehidden ? 1 : 0,
         'libraryimageid' => $libraryimageid ?: null,
         'timemodified'   => time(),
     ];
@@ -173,14 +165,19 @@ if ($action === 'bulkedit' && confirm_sesskey()) {
         $updated = 0;
         foreach ($ruleids as $id) {
             $rule = $DB->get_record('iccaformat_label_rules', ['id' => (int)$id, 'courseid' => $scopeid]);
-            if (!$rule) continue;
+            if (!$rule) { continue;
+            }
             $changed = false;
             foreach ($fields as $col => $val) {
-                if ($val === 'nochange') continue;
+                if ($val === 'nochange') { continue;
+                }
                 if ($col === 'image_hidden') {
-                    if ($val === 'enable')  { $rule->image_hidden = 0; $changed = true; }
-                    if ($val === 'disable') { $rule->image_hidden = 1; $changed = true; }
-                    if ($val === 'remove')  { $rule->libraryimageid = 0; $rule->image_hidden = 0; $changed = true; }
+                    if ($val === 'enable')  { $rule->image_hidden = 0; $changed = true;
+                    }
+                    if ($val === 'disable') { $rule->image_hidden = 1; $changed = true;
+                    }
+                    if ($val === 'remove')  { $rule->libraryimageid = 0; $rule->image_hidden = 0; $changed = true;
+                    }
                 } else {
                     $rule->$col = ($val === 'enable') ? 1 : 0;
                     $changed = true;
@@ -192,7 +189,7 @@ if ($action === 'bulkedit' && confirm_sesskey()) {
                 $updated++;
             }
         }
-        redirect($selfurl, $updated . ' rule(s) updated.', null, \core\output\notification::NOTIFY_SUCCESS);
+        redirect($selfurl, get_string('labelrules_bulk_updated', 'format_iccaformat', $updated), null, \core\output\notification::NOTIFY_SUCCESS);
     }
     redirect($selfurl);
 }
@@ -201,16 +198,19 @@ if ($action === 'bulkaction' && confirm_sesskey()) {
     $bulkop  = optional_param('bulkop', '', PARAM_ALPHA);
     $ruleids = optional_param_array('ruleids', [], PARAM_INT);
     if (!empty($ruleids)) {
-        if ($bulkop === 'delete') {
+        if ($bulkop === 'delete' || ($bulkop === 'resettosite' && $scopeid !== 0)) {
+            // Count what was actually removed, not what was submitted.
+            $deleted = 0;
             foreach ($ruleids as $id) {
-                $DB->delete_records('iccaformat_label_rules', ['id' => $id, 'courseid' => $scopeid]);
+                $params = ['id' => (int) $id, 'courseid' => $scopeid];
+                if ($DB->record_exists('iccaformat_label_rules', $params)) {
+                    $DB->delete_records('iccaformat_label_rules', $params);
+                    $deleted++;
+                }
             }
-            redirect($selfurl, count($ruleids) . ' rule(s) deleted.', null, \core\output\notification::NOTIFY_SUCCESS);
-        } else if ($bulkop === 'resettosite' && $scopeid !== 0) {
-            foreach ($ruleids as $id) {
-                $DB->delete_records('iccaformat_label_rules', ['id' => $id, 'courseid' => $scopeid]);
-            }
-            redirect($selfurl, count($ruleids) . ' rule(s) reset to site-wide defaults.', null, \core\output\notification::NOTIFY_SUCCESS);
+            $msgkey = ($bulkop === 'delete') ? 'labelrules_bulk_deleted' : 'labelrules_bulk_resettosite';
+            redirect($selfurl, get_string($msgkey, 'format_iccaformat', $deleted), null,
+                \core\output\notification::NOTIFY_SUCCESS);
         } else if ($bulkop === 'resetallcourses' && $scopeid === 0) {
             // Get the modnames for the selected rule IDs.
             list($insql, $params) = $DB->get_in_or_equal($ruleids);
@@ -220,7 +220,7 @@ if ($action === 'bulkaction' && confirm_sesskey()) {
                 $DB->delete_records_select('iccaformat_label_rules', 'courseid != 0 AND modname = ?', [$r->modname]);
                 $deleted++;
             }
-            redirect($selfurl, $deleted . ' rule(s) reset across all courses.', null, \core\output\notification::NOTIFY_SUCCESS);
+            redirect($selfurl, get_string('labelrules_bulk_resetallcourses', 'format_iccaformat', $deleted), null, \core\output\notification::NOTIFY_SUCCESS);
         }
     }
     redirect($selfurl);
@@ -246,7 +246,7 @@ if ($action === 'resetselected' && $scopeid !== 0 && confirm_sesskey()) {
             $deleted++;
         }
     }
-    redirect($selfurl, $deleted . ' rule(s) reset to site-wide defaults.',
+    redirect($selfurl, get_string('labelrules_bulk_resettosite', 'format_iccaformat', $deleted),
         null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
@@ -260,20 +260,10 @@ if ($action === 'delete' && $ruleid && confirm_sesskey()) {
 }
 
 if ($action === 'seedefaults' && $issiteadmin && $scopeid === 0 && confirm_sesskey()) {
-    foreach ($defaultrules as $modname => $defaults) {
-        if (!$DB->record_exists('iccaformat_label_rules', ['courseid' => 0, 'modname' => $modname])) {
-            $DB->insert_record('iccaformat_label_rules', (object)[
-                'courseid'     => 0,
-                'modname'      => $modname,
-                'label'        => $defaults['label'],
-                'icon'         => $defaults['icon'],
-                'label_enabled' => 1,
-                    'icon_enabled'  => 1,
-                    'flipped'       => 0,
-                'timemodified' => time(),
-            ]);
-        }
-    }
+    // Creates any missing default rules, and links bundled images to rules without
+    // an image — only where those images are already in the site library (they are
+    // added on first install). Existing rules are otherwise left exactly as they are.
+    \format_iccaformat\local\defaults::seed_rules(\format_iccaformat\local\defaults::find_bundled_images());
     redirect($selfurl, get_string('labelrules_defaults_loaded', 'format_iccaformat'),
         null, \core\output\notification::NOTIFY_SUCCESS);
 }
@@ -288,7 +278,7 @@ if ($scopeid === 0 && $action === 'pushselectedcourses' && confirm_sesskey()) {
             'courseid != 0 AND modname = ?', [$modname]);
         $pushed++;
     }
-    redirect($selfurl, $pushed . ' rule(s) reset to site-wide defaults across all courses.',
+    redirect($selfurl, get_string('labelrules_bulk_pushedselected', 'format_iccaformat', $pushed),
         null, \core\output\notification::NOTIFY_SUCCESS);
 }
 
@@ -324,12 +314,12 @@ if ($scopeid === 0 && optional_param('action', '', PARAM_ALPHA) === 'pushtocours
 $rules = $DB->get_records('iccaformat_label_rules', ['courseid' => $scopeid], 'modname ASC');
 
 // Load site rules for reference when viewing course page.
-$siterules_raw = ($scopeid !== 0)
+$siterulesraw = ($scopeid !== 0)
     ? $DB->get_records('iccaformat_label_rules', ['courseid' => 0], 'modname ASC')
     : [];
 // Re-key by modname for easy lookup.
 $siterules = [];
-foreach ($siterules_raw as $r) {
+foreach ($siterulesraw as $r) {
     $siterules[$r->modname] = $r;
 }
 
@@ -416,7 +406,7 @@ if ($scopeid === 0) {
         get_string('formatlibrary_site', 'format_iccaformat'),
         ['class' => 'btn btn-secondary']
     );
-    echo '<span style="font-size:0.85rem;color:#6c757d;margin-left:4px;">Manage Card Image Library (Site wide).</span>';
+    echo '<span style="font-size:0.85rem;color:#6c757d;margin-left:4px;">' . get_string('labelrules_ui_manageimagelib_site', 'format_iccaformat') . '</span>';
     echo '</div>';
 
     // Site-wide reset dialog — with checkboxes per modname.
@@ -430,7 +420,7 @@ if ($scopeid === 0) {
         echo '<form method="post" action="' . new moodle_url($selfurl, ['action' => 'pushselectedcourses', 'sesskey' => sesskey()]) . '">';
         echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
         echo '<label style="display:flex;align-items:center;gap:8px;font-size:1rem;margin-bottom:10px;cursor:pointer;font-weight:500;">';
-        echo '<input type="checkbox" id="icca-site-reset-all" onchange="iccaSiteResetSelectAll(this)" style="accent-color:#0d3c6f;width:16px;height:16px;"> Select all</label>';
+        echo '<input type="checkbox" id="icca-site-reset-all" onchange="iccaSiteResetSelectAll(this)" style="accent-color:#0d3c6f;width:16px;height:16px;"> ' . get_string('selectall') . '</label>';
         echo '<div style="border-top:0.5px solid #dee2e6;padding-top:10px;display:flex;flex-direction:column;gap:6px;margin-bottom:1rem;">';
         foreach ($rules as $rule) {
             $moddisplay = $modnamesmap[$rule->modname] ?? $rule->modname;
@@ -441,8 +431,8 @@ if ($scopeid === 0) {
         }
         echo '</div>';
         echo '<div style="display:flex;gap:8px;justify-content:flex-end;">';
-        echo '<button type="button" onclick="iccaCloseSiteRuleResetDialog()" style="padding:8px 16px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:1rem;cursor:pointer;">Cancel</button>';
-        echo '<button type="submit" style="padding:8px 16px;background:#dc3545;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:500;">Reset selected</button>';
+        echo '<button type="button" onclick="iccaCloseSiteRuleResetDialog()" style="padding:8px 16px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:1rem;cursor:pointer;">' . get_string('cancel') . '</button>';
+        echo '<button type="submit" style="padding:8px 16px;background:#dc3545;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:500;">' . get_string('labelrules_ui_resetselected', 'format_iccaformat') . '</button>';
         echo '</div>';
         echo '</form></div></div>';
     }
@@ -453,7 +443,7 @@ if ($scopeid === 0) {
     echo '<h4 style="margin:0 0 0.5rem;font-size:1.1rem;">' . get_string('labelrules_load_defaults', 'format_iccaformat') . '</h4>';
     echo '<p style="font-size:0.9rem;color:#6c757d;margin:0 0 1rem;">' . get_string('labelrules_load_defaults_desc', 'format_iccaformat') . '</p>';
     echo '<div style="display:flex;gap:8px;justify-content:flex-end;">';
-    echo '<button type="button" onclick="iccaCloseLoadDefaultsDialog()" style="padding:8px 16px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:1rem;cursor:pointer;">Cancel</button>';
+    echo '<button type="button" onclick="iccaCloseLoadDefaultsDialog()" style="padding:8px 16px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:1rem;cursor:pointer;">' . get_string('cancel') . '</button>';
     echo html_writer::link($seedurl, get_string('labelrules_load_defaults', 'format_iccaformat'),
         ['class' => 'btn btn-secondary', 'style' => 'padding:8px 16px;']);
     echo '</div>';
@@ -466,7 +456,7 @@ if ($scopeid === 0) {
         get_string('formatlibrary_course', 'format_iccaformat'),
         ['class' => 'btn btn-secondary']
     );
-    echo '<span style="font-size:0.85rem;color:#6c757d;margin-left:4px;">Manage Card Image Library (This course).</span>';
+    echo '<span style="font-size:0.85rem;color:#6c757d;margin-left:4px;">' . get_string('labelrules_ui_manageimagelib_course', 'format_iccaformat') . '</span>';
     echo '</div>';
 
     // Reset dialog — only shown if course has rules.
@@ -480,7 +470,7 @@ if ($scopeid === 0) {
         echo '<form method="post" action="' . $reseturl . '">';
         echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
         echo '<label style="display:flex;align-items:center;gap:8px;font-size:1rem;margin-bottom:10px;cursor:pointer;font-weight:500;">';
-        echo '<input type="checkbox" id="icca-rule-reset-all" onchange="iccaRuleResetSelectAll(this)" style="accent-color:#0d3c6f;width:16px;height:16px;"> Select all</label>';
+        echo '<input type="checkbox" id="icca-rule-reset-all" onchange="iccaRuleResetSelectAll(this)" style="accent-color:#0d3c6f;width:16px;height:16px;"> ' . get_string('selectall') . '</label>';
         echo '<div style="border-top:0.5px solid #dee2e6;padding-top:10px;display:flex;flex-direction:column;gap:6px;margin-bottom:1rem;">';
         foreach ($rules as $rule) {
             $moddisplay = $modnamesmap[$rule->modname] ?? $rule->modname;
@@ -491,8 +481,8 @@ if ($scopeid === 0) {
         }
         echo '</div>';
         echo '<div style="display:flex;gap:8px;justify-content:flex-end;">';
-        echo '<button type="button" onclick="iccaCloseRuleResetDialog()" style="padding:8px 16px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:1rem;cursor:pointer;">Cancel</button>';
-        echo '<button type="submit" style="padding:8px 16px;background:#dc3545;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:500;">Reset selected</button>';
+        echo '<button type="button" onclick="iccaCloseRuleResetDialog()" style="padding:8px 16px;background:transparent;border:1px solid #dee2e6;border-radius:6px;font-size:1rem;cursor:pointer;">' . get_string('cancel') . '</button>';
+        echo '<button type="submit" style="padding:8px 16px;background:#dc3545;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:500;">' . get_string('labelrules_ui_resetselected', 'format_iccaformat') . '</button>';
         echo '</div>';
         echo '</form></div></div>';
     }
@@ -525,10 +515,11 @@ if ($scopeid === 0) {
 </style>
 <?php
 
-$editrule   = $ruleid ? $DB->get_record('iccaformat_label_rules', ['id' => $ruleid]) : null;
+// Scoped to the current page's rules, matching the save/delete handlers above.
+$editrule   = $ruleid ? ($DB->get_record('iccaformat_label_rules', ['id' => $ruleid, 'courseid' => $scopeid]) ?: null) : null;
 $iconval    = $editrule ? s($editrule->icon) : '';
 $labelval   = $editrule ? s($editrule->label) : '';
-$iconchecked        = (!$editrule || $editrule->icon_enabled)  ? 'checked' : '';
+$iconchecked        = (!$editrule || $editrule->icon_enabled) ? 'checked' : '';
 $labelchecked       = (!$editrule || !isset($editrule->label_enabled) || $editrule->label_enabled) ? 'checked' : '';
 $flipchecked        = ($editrule && !empty($editrule->flipped)) ? 'checked' : '';
 $imagehiddenchecked = ($editrule && !empty($editrule->image_hidden)) ? 'checked' : '';
@@ -603,7 +594,7 @@ if (!$editrule && empty($availmodtypes)) {
             // Pre-fill icon, visibility, and image from site rule if not already editing a course rule.
             if (!$editrule) {
                 $iconval       = s($siterule->icon ?? '');
-                $iconchecked   = !empty($siterule->icon_enabled)  ? 'checked' : '';
+                $iconchecked   = !empty($siterule->icon_enabled) ? 'checked' : '';
                 $labelchecked  = !empty($siterule->label_enabled) ? 'checked' : '';
                 $flipchecked         = !empty($siterule->flipped) ? 'checked' : '';
                 $imagehiddenchecked  = !empty($siterule->image_hidden) ? 'checked' : '';
@@ -636,7 +627,7 @@ if (!$editrule && empty($availmodtypes)) {
             'roman'   => get_string('sectionicontype_roman',   'format_iccaformat'),
             'icon'    => get_string('sectionicontype_icon',    'format_iccaformat'),
         ];
-        $specialvals = ['none','numeric','alpha','ALPHA','roman','icon'];
+        $specialvals = ['none', 'numeric', 'alpha', 'ALPHA', 'roman', 'icon'];
         $curtype = in_array($iconval, $specialvals) ? $iconval : ($iconval ? 'icon' : 'numeric');
         echo '<select id="lr_section_icontype" onchange="iccaSectionIconTypeChange(this.value)" style="width:100%;border:1px solid #dee2e6;border-radius:6px;padding:7px 10px;font-size:1rem;margin-bottom:8px;">';
         foreach ($numtypes as $val => $label) {
@@ -645,28 +636,17 @@ if (!$editrule && empty($availmodtypes)) {
         }
         echo '</select>';
         // Custom icon picker — shown only when "Custom icon" selected.
-        $customiconval = (!in_array($iconval, ['none','numeric','alpha','ALPHA','roman','']) ? $iconval : '');
+        $customiconval = (!in_array($iconval, ['none', 'numeric', 'alpha', 'ALPHA', 'roman', '']) ? $iconval : '');
         echo '<div id="lr_section_custompicker" style="display:' . ($curtype === 'icon' ? 'block' : 'none') . ';">';
-        echo '<div style="position:relative;">';
-        echo '<div style="display:flex;align-items:center;gap:6px;">';
-        echo '<span id="lr_icon_preview" style="width:34px;height:34px;border:1px solid #dee2e6;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#6c757d;background:#f8f9fa;">';
-        echo '<i id="lr_icon_preview_i" class="' . ($customiconval ? 'fa ' . $customiconval : '') . '" aria-hidden="true"></i>';
-        echo '</span>';
-        echo '<input type="text" id="lr_icon_search" value="' . s($customiconval) . '" placeholder="Search icons..." autocomplete="off" style="font-family:monospace;font-size:1rem;flex:1;border:1px solid #dee2e6;border-radius:6px;padding:7px 10px;">';
+        echo \format_iccaformat\local\icon_picker::field_html(html_entity_decode($customiconval, ENT_QUOTES), 'lr_icon', '',
+            ['input' => 'lr_icon_search', 'preview' => 'lr_icon_preview_i', 'previewwrap' => 'lr_icon_preview',
+             'dropdown' => 'lr_icon_dropdown']);
         echo '</div>';
-        echo '<div id="lr_icon_dropdown" style="display:none;position:absolute;top:100%;left:42px;right:0;background:#fff;border:1px solid #dee2e6;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.1);max-height:200px;overflow-y:auto;z-index:1000;margin-top:2px;"></div>';
-        echo '</div></div>';
     } else {
-        // Normal FA icon picker.
-        echo '<div style="position:relative;">';
-        echo '<div style="display:flex;align-items:center;gap:6px;">';
-        echo '<span id="lr_icon_preview" style="width:34px;height:34px;border:1px solid #dee2e6;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#6c757d;background:#f8f9fa;">';
-        echo '<i id="lr_icon_preview_i" class="' . ($iconval ?: '') . '" aria-hidden="true"></i>';
-        echo '</span>';
-        echo '<input type="text" id="lr_icon_search" value="' . $iconval . '" placeholder="Search icons..." autocomplete="off" style="font-family:monospace;font-size:1rem;flex:1;border:1px solid #dee2e6;border-radius:6px;padding:7px 10px;">';
-        echo '</div>';
-        echo '<div id="lr_icon_dropdown" style="display:none;position:absolute;top:100%;left:42px;right:0;background:#fff;border:1px solid #dee2e6;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.1);max-height:200px;overflow-y:auto;z-index:1000;margin-top:2px;"></div>';
-        echo '</div>';
+        // Normal FA icon picker (shared with the per-card override on edit forms).
+        echo \format_iccaformat\local\icon_picker::field_html(html_entity_decode($iconval, ENT_QUOTES), 'lr_icon', '',
+            ['input' => 'lr_icon_search', 'preview' => 'lr_icon_preview_i', 'previewwrap' => 'lr_icon_preview',
+             'dropdown' => 'lr_icon_dropdown']);
         echo '<p style="font-size:11px;color:#adb5bd;margin:3px 0 0;">' . get_string('labelrules_icon_help_short', 'format_iccaformat') . '</p>';
     }
     echo '</div>';
@@ -714,17 +694,17 @@ if (!$editrule && empty($availmodtypes)) {
         ? 'Image will be added to the All courses image library.'
         : 'Image will be added to this course\'s image library.';
     echo '<p style="font-size:0.85rem;color:#6c757d;margin:0 0 8px;">' . $uploadlibhint . '</p>';
-    echo '<label style="font-size:0.85rem;font-weight:500;display:block;margin-bottom:3px;">Image name</label>';
+    echo '<label style="font-size:0.85rem;font-weight:500;display:block;margin-bottom:3px;">' . get_string('labelrules_ui_imagename', 'format_iccaformat') . '</label>';
     echo '<input type="text" name="rule_imagename" id="lr_upload_name" autocomplete="off"'
         . ' style="width:100%;border:1px solid #dee2e6;border-radius:4px;padding:5px 8px;font-size:1rem;margin-bottom:8px;">';
-    echo '<label style="font-size:0.85rem;font-weight:500;display:block;margin-bottom:3px;">File</label>';
+    echo '<label style="font-size:0.85rem;font-weight:500;display:block;margin-bottom:3px;">' . get_string('file') . '</label>';
     echo '<input type="file" name="rule_imageupload" id="lr_upload_file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg"'
         . ' onchange="iccaLrUploadFileChanged(this)"'
         . ' style="width:100%;font-size:0.9rem;">';
     echo '</div>';
-    echo '<div id="lr_img_panel" style="display:none;margin-top:6px;border:1px solid #dee2e6;border-radius:6px;background:#fff;">' . 
+    echo '<div id="lr_img_panel" style="display:none;margin-top:6px;border:1px solid #dee2e6;border-radius:6px;background:#fff;">' .
         '<div style="padding:8px;border-bottom:1px solid #dee2e6;">' .
-        '<input type="text" id="lr_img_search" placeholder="Search images..." oninput="iccaLrFilterImgs(this.value)"' .
+        '<input type="text" id="lr_img_search" placeholder="' . get_string('labelrules_ui_searchimages', 'format_iccaformat') . '" oninput="iccaLrFilterImgs(this.value)"' .
         ' style="width:100%;border:1px solid #dee2e6;border-radius:4px;padding:5px 8px;font-size:1rem;"></div>' .
         '<div id="lr_img_grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;padding:8px;max-height:260px;overflow-y:auto;">';
     foreach ($libimages as $img) {
@@ -768,7 +748,8 @@ if ($scopeid === 0) {
     echo '<div class="icca-lr-card">';
     echo '<div class="icca-lr-card-head">';
         echo '<h3>' . get_string('skip_modtypes', 'format_iccaformat') . '</h3>';
-    if ($skipcount) echo '<span class="badge">' . $skipcount . ' skipped</span>';
+    if ($skipcount) { echo '<span class="badge">' . $skipcount . ' skipped</span>';
+    }
     echo '</div>';
     echo '<div class="icca-lr-card-body">';
     echo '<p style="font-size:1rem;color:#6c757d;margin-bottom:10px;">'
@@ -778,7 +759,7 @@ if ($scopeid === 0) {
     echo '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;">';
     // Available.
     echo '<div>';
-    echo '<label style="display:block;font-size:1rem;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Available</label>';
+    echo '<label style="display:block;font-size:1rem;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">' . get_string('labelrules_ui_available', 'format_iccaformat') . '</label>';
     echo '<select id="icca-skip-available" multiple size="10" style="width:100%;border:1px solid #dee2e6;border-radius:6px;padding:4px;font-size:1rem;">';
     foreach ($allmodssorted as $m) {
         if (!in_array($m, $skipmodtypes, true)) {
@@ -789,12 +770,12 @@ if ($scopeid === 0) {
     echo '</select></div>';
     // Arrows.
     echo '<div style="display:flex;flex-direction:column;gap:6px;">';
-    echo '<button type="button" onclick="iccaMoveSkip(\'available\',\'skipped\')" style="padding:5px 8px;border:1px solid #dee2e6;border-radius:6px;background:#f8f9fa;cursor:pointer;font-size:1rem;" title="Skip">&rarr;</button>';
-    echo '<button type="button" onclick="iccaMoveSkip(\'skipped\',\'available\')" style="padding:5px 8px;border:1px solid #dee2e6;border-radius:6px;background:#f8f9fa;cursor:pointer;font-size:1rem;" title="Unskip">&larr;</button>';
+    echo '<button type="button" onclick="iccaMoveSkip(\'available\',\'skipped\')" style="padding:5px 8px;border:1px solid #dee2e6;border-radius:6px;background:#f8f9fa;cursor:pointer;font-size:1rem;" title="' . get_string('labelrules_ui_skip', 'format_iccaformat') . '">&rarr;</button>';
+    echo '<button type="button" onclick="iccaMoveSkip(\'skipped\',\'available\')" style="padding:5px 8px;border:1px solid #dee2e6;border-radius:6px;background:#f8f9fa;cursor:pointer;font-size:1rem;" title="' . get_string('labelrules_ui_unskip', 'format_iccaformat') . '">&larr;</button>';
     echo '</div>';
     // Skipped.
     echo '<div>';
-    echo '<label style="display:block;font-size:1rem;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Skipped</label>';
+    echo '<label style="display:block;font-size:1rem;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">' . get_string('labelrules_ui_skipped', 'format_iccaformat') . '</label>';
     echo '<select id="icca-skip-skipped" name="skipped[]" multiple size="10" style="width:100%;border:1px solid #dee2e6;border-radius:6px;padding:4px;font-size:1rem;">';
     foreach ($allmodssorted as $m) {
         if (in_array($m, $skipmodtypes, true)) {
@@ -817,15 +798,15 @@ echo '</div>'; // left panel
 echo '<div>';
 echo '<div class="icca-lr-card">';
 // Bulk action bar (hidden until rows selected).
-$bulkaction_url  = new moodle_url($selfurl, ['action' => 'bulkaction', 'sesskey' => sesskey()]);
-$bulkedit_url    = new moodle_url($selfurl, ['action' => 'bulkedit',   'sesskey' => sesskey()]);
-echo '<form id="icca-lr-bulk-form" method="post" action="' . $bulkaction_url . '">';
+$bulkactionurl  = new moodle_url($selfurl, ['action' => 'bulkaction', 'sesskey' => sesskey()]);
+$bulkediturl    = new moodle_url($selfurl, ['action' => 'bulkedit',   'sesskey' => sesskey()]);
+echo '<form id="icca-lr-bulk-form" method="post" action="' . $bulkactionurl . '">';
 echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
 echo '<input type="hidden" name="scopeid" value="' . $scopeid . '">';
 
 // Bulk action bar.
 echo '<div id="icca-lr-bulk-bar" style="display:none;padding:8px 14px;background:#fff3cd;border:0.5px solid #ffe082;border-radius:8px;margin-bottom:8px;align-items:center;gap:10px;flex-wrap:wrap;">'
-    . '<span id="icca-lr-bulk-count" style="font-size:1rem;color:#856404;font-weight:500;">0 selected</span>'
+    . '<span id="icca-lr-bulk-count" style="font-size:1rem;color:#856404;font-weight:500;">' . get_string('labelrules_ui_nselected', 'format_iccaformat', 0) . '</span>'
     . '<button type="button" class="btn btn-secondary btn-sm" onclick="iccaLrToggleBulkEdit()">'
         . get_string('bulkedit_btn', 'format_iccaformat') . '</button>'
     . ($scopeid === 0
@@ -844,7 +825,7 @@ echo '<div id="icca-lr-bulkedit-panel" style="display:none;margin:0 0 8px;backgr
 echo '<p style="font-size:1rem;font-weight:500;margin:0 0 12px;">' . get_string('bulkedit_title', 'format_iccaformat') . '</p>';
 
 // Radio grid.
-$be_fields = [
+$befields = [
     'be_icons'  => get_string('carddefault_icons',  'format_iccaformat'),
     'be_labels' => get_string('carddefault_labels', 'format_iccaformat'),
     'be_images' => get_string('carddefault_images', 'format_iccaformat'),
@@ -853,13 +834,13 @@ $be_fields = [
 echo '<table style="border-collapse:collapse;">';
 echo '<thead><tr>'
     . '<th style="text-align:left;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 20px 4px 0;min-width:140px;"></th>'
-    . '<th style="text-align:center;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 16px;">Enable</th>'
-    . '<th style="text-align:center;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 16px;">Disable</th>'
-    . '<th style="text-align:center;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 16px;">Remove</th>'
-    . '<th style="text-align:center;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 16px;">No change</th>'
+    . '<th style="text-align:center;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 16px;">' . get_string('labelrules_ui_be_enable', 'format_iccaformat') . '</th>'
+    . '<th style="text-align:center;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 16px;">' . get_string('labelrules_ui_be_disable', 'format_iccaformat') . '</th>'
+    . '<th style="text-align:center;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 16px;">' . get_string('labelrules_ui_be_remove', 'format_iccaformat') . '</th>'
+    . '<th style="text-align:center;font-size:0.85rem;font-weight:500;color:#6c757d;padding:4px 16px;">' . get_string('labelrules_ui_be_nochange', 'format_iccaformat') . '</th>'
     . '</tr></thead><tbody>';
 
-foreach ($be_fields as $fname => $flabel) {
+foreach ($befields as $fname => $flabel) {
     $isimages = ($fname === 'be_images');
     echo '<tr style="border-top:0.5px solid #dee2e6;">'
         . '<td style="padding:8px 20px 8px 0;font-size:1rem;color:#495057;">' . $flabel . '</td>'
@@ -878,7 +859,7 @@ echo '<p style="font-size:0.85rem;color:#6c757d;margin:8px 0 12px;">'
     . get_string('bulkedit_hint', 'format_iccaformat')
     . ' ' . get_string('bulkedit_images_hint', 'format_iccaformat') . '</p>';
 echo '<div style="display:flex;gap:8px;">'
-    . '<button type="button" id="icca-lr-bulkedit-apply" class="btn btn-primary btn-sm" onclick="iccaLrApplyBulkEdit(\'' . $bulkedit_url . '\')">'
+    . '<button type="button" id="icca-lr-bulkedit-apply" class="btn btn-primary btn-sm" onclick="iccaLrApplyBulkEdit(\'' . $bulkediturl . '\')">'
         . get_string('bulkedit_apply', 'format_iccaformat') . '</button>'
     . '<button type="button" class="btn btn-sm" onclick="iccaLrToggleBulkEdit()" style="border:1px solid #dee2e6;background:transparent;color:#6c757d;">'
         . get_string('cancel') . '</button>'
@@ -905,12 +886,12 @@ if ($scopeid !== 0) {
         echo '<span class="badge">' . $rulecount . ' rules</span>';
     }
 }
-echo '<input type="text" id="icca-lr-search" placeholder="Search..." oninput="iccaLrSearch(this.value, false)"'
+echo '<input type="text" id="icca-lr-search" placeholder="' . get_string('labelrules_ui_search', 'format_iccaformat') . '" oninput="iccaLrSearch(this.value, false)"'
     . ' style="border:1px solid #dee2e6;border-radius:6px;padding:4px 10px;font-size:1rem;width:140px;margin-left:8px;">';
 if ($scopeid !== 0) {
     echo '<label style="display:inline-flex;align-items:center;gap:5px;font-size:0.9rem;color:#6c757d;margin-left:10px;cursor:pointer;white-space:nowrap;">'
         . '<input type="checkbox" id="icca-hide-overridden" onchange="iccaLrSearch(document.getElementById(\'icca-lr-search\').value, false)" style="accent-color:#0d3c6f;">'
-        . ' Hide overridden</label>';
+        . ' ' . get_string('labelrules_ui_hideoverridden', 'format_iccaformat') . '</label>';
 }
 echo '</div>';
 
@@ -945,10 +926,10 @@ if (!empty($rules)) {
         echo '<td>';
         if ($rule->icon) {
             $offstyle = $iconon ? '' : 'opacity:0.4;';
-            $specialicons = ['none','numeric','alpha','ALPHA','roman'];
+            $specialicons = ['none', 'numeric', 'alpha', 'ALPHA', 'roman'];
             if (in_array($rule->icon, $specialicons) && $rule->modname === 'section') {
                 // Show numbering style label instead of FA icon.
-                $labels = ['none'=>'None','numeric'=>'1, 2, 3...','alpha'=>'a, b, c...','ALPHA'=>'A, B, C...','roman'=>'i, ii, iii...'];
+                $labels = ['none' => 'None', 'numeric' => '1, 2, 3...', 'alpha' => 'a, b, c...', 'ALPHA' => 'A, B, C...', 'roman' => 'i, ii, iii...'];
                 echo '<span style="display:inline-flex;align-items:center;gap:5px;font-size:1rem;' . $offstyle . '">';
                 echo '<code style="font-size:1rem;color:#6c757d;">' . ($labels[$rule->icon] ?? $rule->icon) . '</code>';
                 echo '</span>';
@@ -976,21 +957,19 @@ if (!empty($rules)) {
             }
             echo '</div>';
         } else {
-            echo '<span style="color:#adb5bd;font-size:1rem;">None</span>';
+            echo '<span style="color:#adb5bd;font-size:1rem;">' . get_string('none') . '</span>';
         }
         echo '</td>';
         echo '<td>';
         echo '<div style="display:flex;gap:8px;">';
         echo '<span style="font-size:1rem;" class="' . ($labelon ? 'icca-vis-tick' : 'icca-vis-cross') . '">'
-            . ($labelon ? '✓' : '✗') . ' Label</span>';
+            . ($labelon ? '✓' : '✗') . ' ' . get_string('labelrules_ui_vis_label', 'format_iccaformat') . '</span>';
         echo '<span style="font-size:1rem;" class="' . ($iconon ? 'icca-vis-tick' : 'icca-vis-cross') . '">'
-            . ($iconon ? '✓' : '✗') . ' Icon</span>';
+            . ($iconon ? '✓' : '✗') . ' ' . get_string('labelrules_ui_vis_icon', 'format_iccaformat') . '</span>';
         if ($flippedon) {
-            echo '<span style="font-size:0.8rem;background:#e8f0fb;color:#0d3c6f;border-radius:4px;padding:1px 7px;font-weight:500;" title="Icon and label order is flipped">⇄ Flipped</span>';
+            echo '<span style="font-size:0.8rem;background:#e8f0fb;color:#0d3c6f;border-radius:4px;padding:1px 7px;font-weight:500;" title="' . get_string('labelrules_ui_flipped_title', 'format_iccaformat') . '">⇄ ' . get_string('labelrules_ui_flipped', 'format_iccaformat') . '</span>';
         }
-        if ($imghidden) {
-            // Image hidden state shown on thumbnail — no pill needed here.
-        }
+        // Image hidden state is shown on the thumbnail, so no pill is needed for it here.
         echo '</div>';
         echo '</td>';
         echo '<td>';
@@ -1004,7 +983,7 @@ if (!empty($rules)) {
             echo html_writer::link($resetallurl, get_string('labelrules_reset_courses_sitewide', 'format_iccaformat'), [
                 'class'   => 'btn btn-warning btn-sm',
                 'style'   => 'display:inline-block;',
-                'onclick' => "return confirm('Reset all courses to the site-wide rule for this module type?');",
+                'onclick' => 'return confirm(' . json_encode(get_string('labelrules_ui_confirm_resetallcourses', 'format_iccaformat')) . ');',
             ]);
             echo html_writer::link($deleteurl, get_string('delete'), [
                 'class'   => 'btn btn-danger btn-sm',
@@ -1051,8 +1030,8 @@ if ($scopeid !== 0 && !empty($siterules)) {
         $imghidden  = !empty($rule->image_hidden);
         $alreadyoverridden = in_array($rule->modname, $courseexistingmods, true);
         // Icon display — handle numbering types for section.
-        $specialicons = ['none','numeric','alpha','ALPHA','roman'];
-        $iconlabels = ['none'=>'None','numeric'=>'1, 2, 3...','alpha'=>'a, b, c...','ALPHA'=>'A, B, C...','roman'=>'i, ii, iii...'];
+        $specialicons = ['none', 'numeric', 'alpha', 'ALPHA', 'roman'];
+        $iconlabels = ['none' => 'None', 'numeric' => '1, 2, 3...', 'alpha' => 'a, b, c...', 'ALPHA' => 'A, B, C...', 'roman' => 'i, ii, iii...'];
         if ($rule->icon && in_array($rule->icon, $specialicons) && $rule->modname === 'section') {
             $icondisplay = '<code style="font-size:1rem;color:#6c757d;">' . ($iconlabels[$rule->icon] ?? $rule->icon) . '</code>';
         } else if ($rule->icon) {
@@ -1080,10 +1059,10 @@ if ($scopeid !== 0 && !empty($siterules)) {
             }
             $imgtd .= '</div>';
         } else {
-            $imgtd = '<span style="color:#adb5bd;font-size:1rem;">None</span>';
+            $imgtd = '<span style="color:#adb5bd;font-size:1rem;">' . get_string('none') . '</span>';
         }
         echo '<td>' . $imgtd . '</td>';
-        echo '<td><div style="display:flex;gap:8px;"><span style="font-size:1rem;" class="' . ($labelon ? 'icca-vis-tick' : 'icca-vis-cross') . '">' . ($labelon ? '✓' : '✗') . ' Label</span><span style="font-size:1rem;" class="' . ($iconon ? 'icca-vis-tick' : 'icca-vis-cross') . '">' . ($iconon ? '✓' : '✗') . ' Icon</span>' . ($flippedon ? '<span style="font-size:0.8rem;background:#e8f0fb;color:#0d3c6f;border-radius:4px;padding:1px 7px;font-weight:500;" title="Icon and label order is flipped">⇄ Flipped</span>' : '') . '</div></td>';
+        echo '<td><div style="display:flex;gap:8px;"><span style="font-size:1rem;" class="' . ($labelon ? 'icca-vis-tick' : 'icca-vis-cross') . '">' . ($labelon ? '✓' : '✗') . ' ' . get_string('labelrules_ui_vis_label', 'format_iccaformat') . '</span><span style="font-size:1rem;" class="' . ($iconon ? 'icca-vis-tick' : 'icca-vis-cross') . '">' . ($iconon ? '✓' : '✗') . ' ' . get_string('labelrules_ui_vis_icon', 'format_iccaformat') . '</span>' . ($flippedon ? '<span style="font-size:0.8rem;background:#e8f0fb;color:#0d3c6f;border-radius:4px;padding:1px 7px;font-weight:500;" title="' . get_string('labelrules_ui_flipped_title', 'format_iccaformat') . '">⇄ ' . get_string('labelrules_ui_flipped', 'format_iccaformat') . '</span>' : '') . '</div></td>';
         echo '<td>';
         if (!$alreadyoverridden) {
             // Pre-populate the add form with this modname to create an override.
@@ -1093,7 +1072,7 @@ if ($scopeid !== 0 && !empty($siterules)) {
                 'style' => 'display:inline-block;',
             ]);
         } else {
-            echo '<span style="font-size:0.85rem;color:#6c757d;font-style:italic;">Overridden</span>';
+            echo '<span style="font-size:0.85rem;color:#6c757d;font-style:italic;">' . get_string('labelrules_ui_overridden', 'format_iccaformat') . '</span>';
         }
         echo '</td>';
         echo '</tr>';
@@ -1104,8 +1083,16 @@ if ($scopeid !== 0 && !empty($siterules)) {
 echo '</div></div>'; // card, right panel
 echo '</div>'; // two-col wrap
 
+$iccalrjsstrings = [];
+foreach (['js_selectrule', 'js_selectfield', 'js_confirmbulkedit', 'js_confirmreset', 'js_confirmdelete',
+        'js_applyto', 'nselected'] as $iccalrkey) {
+    $iccalrjsstrings[$iccalrkey] = get_string('labelrules_ui_' . $iccalrkey, 'format_iccaformat');
+}
 ?>
 <script>
+// Lang strings for this page's JS. {$a} is replaced with a count where used.
+var iccaLrStr = <?php echo json_encode($iccalrjsstrings, JSON_HEX_TAG | JSON_HEX_AMP); ?>;
+function iccaLrFmt(key, n) { return iccaLrStr[key].replace('{$a}', n); }
 // Auto-fill label from module name.
 (function() {
     var modsel = document.getElementById('lr_modname');
@@ -1236,9 +1223,9 @@ function iccaLrUpdateBulkBar() {
     var count   = document.getElementById('icca-lr-bulk-count');
     var form    = document.getElementById('icca-lr-bulk-form');
     if (bar) bar.style.display = checked.length > 0 ? 'flex' : 'none';
-    if (count) count.textContent = checked.length + ' selected';
+    if (count) count.textContent = iccaLrFmt('nselected', checked.length);
     var applyBtn = document.getElementById('icca-lr-bulkedit-apply');
-    if (applyBtn) applyBtn.textContent = 'Apply to ' + checked.length + ' rule(s)';
+    if (applyBtn) applyBtn.textContent = iccaLrFmt('js_applyto', checked.length);
     // Hide bulk edit panel when selection cleared.
     if (checked.length === 0) {
         var panel = document.getElementById('icca-lr-bulkedit-panel');
@@ -1269,12 +1256,12 @@ function iccaLrToggleBulkEdit() {
 }
 function iccaLrApplyBulkEdit(url) {
     var count = document.querySelectorAll('.icca-lr-chk:checked').length;
-    if (!count) { alert('Please select at least one rule.'); return; }
+    if (!count) { alert(iccaLrStr.js_selectrule); return; }
     // Check at least one field has a non-nochange value.
     var hasChange = Array.from(document.querySelectorAll('#icca-lr-bulkedit-panel input[type="radio"]:checked'))
         .some(function(r){ return r.value !== 'nochange'; });
-    if (!hasChange) { alert('Please select at least one field to change.'); return; }
-    if (!confirm('Apply bulk edit to ' + count + ' rule(s)?')) return;
+    if (!hasChange) { alert(iccaLrStr.js_selectfield); return; }
+    if (!confirm(iccaLrFmt('js_confirmbulkedit', count))) return;
 
     var form = document.createElement('form');
     form.method = 'post';
@@ -1301,13 +1288,13 @@ function iccaLrApplyBulkEdit(url) {
 }
 function iccaLrBulkConfirmReset() {
     var count = document.querySelectorAll('.icca-lr-chk:checked').length;
-    if (!count) { alert('Please select at least one rule.'); return false; }
-    return confirm('Reset ' + count + ' rule(s)?');
+    if (!count) { alert(iccaLrStr.js_selectrule); return false; }
+    return confirm(iccaLrFmt('js_confirmreset', count));
 }
 function iccaLrBulkConfirmDelete() {
     var count = document.querySelectorAll('.icca-lr-chk:checked').length;
-    if (!count) { alert('Please select at least one rule.'); return false; }
-    return confirm('Delete ' + count + ' rule(s)? This cannot be undone.');
+    if (!count) { alert(iccaLrStr.js_selectrule); return false; }
+    return confirm(iccaLrFmt('js_confirmdelete', count));
 }
 function iccaShowRuleResetDialog() {
     document.querySelectorAll('.icca-rule-reset-chk').forEach(function(cb){ cb.checked = false; });
@@ -1361,7 +1348,7 @@ function iccaLrSearch(val, exact) {
     var hasRuleid   = window.location.search.indexOf('ruleid=') !== -1;
     var hasOverride = window.location.search.indexOf('override=') !== -1;
     if (!hasRuleid && !hasOverride) return;
-    var editModname = '<?= $editrule ? s($editrule->modname) : ($overridemod ? s($overridemod) : '') ?>';
+    var editModname = '<?php echo $editrule ? s($editrule->modname) : ($overridemod ? s($overridemod) : '') ?>';
     if (editModname) {
         var searchEl = document.getElementById('icca-lr-search');
         if (searchEl) {
@@ -1382,122 +1369,5 @@ function iccaLrSearch(val, exact) {
 </script>
 <?php
 
-echo html_writer::start_tag('script');
-$iconlist = json_encode([
-    "fa-home", "fa-user", "fa-users", "fa-group", "fa-cog", "fa-cogs", "fa-wrench",
-    "fa-search", "fa-bell", "fa-star", "fa-heart", "fa-flag", "fa-bookmark",
-    "fa-tag", "fa-tags", "fa-lock", "fa-unlock", "fa-key", "fa-shield",
-    "fa-globe", "fa-map", "fa-map-marker", "fa-compass", "fa-clock-o",
-    "fa-file", "fa-file-o", "fa-file-text", "fa-file-text-o", "fa-file-pdf-o",
-    "fa-file-word-o", "fa-file-excel-o", "fa-file-powerpoint-o", "fa-file-image-o",
-    "fa-file-archive-o", "fa-file-code-o", "fa-files-o", "fa-copy", "fa-clone",
-    "fa-folder", "fa-folder-o", "fa-folder-open", "fa-folder-open-o",
-    "fa-book", "fa-graduation-cap", "fa-mortar-board", "fa-university",
-    "fa-pencil", "fa-pencil-square-o", "fa-edit", "fa-lightbulb-o",
-    "fa-flask", "fa-envelope", "fa-envelope-o", "fa-comment", "fa-comment-o",
-    "fa-comments", "fa-comments-o", "fa-phone", "fa-video-camera",
-    "fa-microphone", "fa-bullhorn", "fa-rss", "fa-share", "fa-share-alt",
-    "fa-play", "fa-play-circle", "fa-play-circle-o", "fa-pause", "fa-stop",
-    "fa-film", "fa-music", "fa-headphones", "fa-image", "fa-camera",
-    "fa-check", "fa-check-circle", "fa-check-circle-o", "fa-check-square",
-    "fa-check-square-o", "fa-times", "fa-times-circle", "fa-circle", "fa-circle-o",
-    "fa-tasks", "fa-list", "fa-list-ul", "fa-list-ol", "fa-th", "fa-th-large",
-    "fa-table", "fa-bars", "fa-bar-chart", "fa-line-chart", "fa-pie-chart",
-    "fa-database", "fa-server", "fa-cloud", "fa-cloud-upload", "fa-cloud-download",
-    "fa-download", "fa-upload", "fa-external-link", "fa-link",
-    "fa-refresh", "fa-repeat", "fa-undo", "fa-arrow-right", "fa-arrow-left",
-    "fa-plus", "fa-plus-circle", "fa-minus", "fa-minus-circle",
-    "fa-question", "fa-question-circle", "fa-question-circle-o",
-    "fa-info", "fa-info-circle", "fa-exclamation-triangle", "fa-warning",
-    "fa-trophy", "fa-certificate", "fa-thumbs-up", "fa-thumbs-down", "fa-hand-pointer-o",
-    "fa-cube", "fa-cubes", "fa-puzzle-piece", "fa-archive",
-    "fa-briefcase", "fa-calendar", "fa-calendar-o", "fa-print",
-    "fa-wpforms", "fa-address-card", "fa-clipboard",
-    "fa-solid fa-layer-group", "fa-solid fa-chalkboard-user",
-    "fa-solid fa-graduation-cap", "fa-solid fa-book-open",
-    "fa-solid fa-clipboard-list", "fa-solid fa-file-lines",
-    "fa-solid fa-circle-check", "fa-solid fa-lightbulb",
-    "fa-solid fa-brain", "fa-solid fa-microscope", "fa-solid fa-flask",
-    "fa-solid fa-scale-balanced", "fa-solid fa-gavel",
-    "fa-solid fa-landmark", "fa-solid fa-building-columns",
-    "fa-solid fa-scroll", "fa-solid fa-feather", "fa-solid fa-pen-nib",
-    "fa-solid fa-highlighter", "fa-solid fa-folder-open",
-    "fa-solid fa-boxes-stacked",
-]);
-echo '
-(function() {
-    var icons = ' . $iconlist . ';
-
-    var hidden   = document.getElementById("lr_icon");
-    var search   = document.getElementById("lr_icon_search");
-    var dropdown = document.getElementById("lr_icon_dropdown");
-    var preview  = document.getElementById("lr_icon_preview_i");
-
-    if (!hidden || !search || !dropdown || !preview) return;
-
-    function renderIcon(cls) {
-        // FA4 uses "fa fa-xxx", FA5 solid uses "fa-solid fa-xxx"
-        if (cls.indexOf("fa-solid") === 0) return cls;
-        return cls ? (cls.indexOf("fa-solid") === 0 ? cls : "fa " + cls) : "";
-    }
-
-    function updatePreview(cls) {
-        preview.className = renderIcon(cls);
-    }
-
-    function showDropdown(query) {
-        var q = query.toLowerCase().trim();
-        var matches = q.length === 0
-            ? icons.slice().sort()
-            : icons.filter(function(ic) {
-                return ic.replace("fa-solid ", "").replace("fa-", "").indexOf(q) !== -1;
-              }).sort();
-
-        if (matches.length === 0) {
-            dropdown.style.display = "none";
-            return;
-        }
-
-        dropdown.innerHTML = "";
-        matches.forEach(function(ic) {
-            var row = document.createElement("div");
-            row.style.cssText = "display:flex;align-items:center;gap:10px;padding:7px 12px;cursor:pointer;font-size:1rem;font-family:monospace;border-bottom:1px solid #f0f0f0;";
-            row.innerHTML = "<i class=\"" + renderIcon(ic) + "\" style=\"width:20px;text-align:center;font-size:16px;color:#495057;\"></i><span>" + ic + "</span>";
-            row.addEventListener("mousedown", function(e) {
-                e.preventDefault();
-                hidden.value = ic;
-                search.value = ic;
-                updatePreview(ic);
-                dropdown.style.display = "none";
-            });
-            row.addEventListener("mouseenter", function() { this.style.background = "#f8f9fa"; });
-            row.addEventListener("mouseleave", function() { this.style.background = ""; });
-            dropdown.appendChild(row);
-        });
-        dropdown.style.display = "block";
-    }
-
-    search.addEventListener("input", function() {
-        updatePreview(this.value.trim());
-        hidden.value = this.value.trim();
-        showDropdown(this.value.trim());
-    });
-
-    search.addEventListener("focus", function() {
-        showDropdown(this.value.trim());
-    });
-
-    document.addEventListener("click", function(e) {
-        if (!dropdown.contains(e.target) && e.target !== search) {
-            dropdown.style.display = "none";
-        }
-    });
-
-    // Initialise preview.
-    updatePreview(hidden.value);
-})();
-';
-echo html_writer::end_tag('script');
 
 echo $OUTPUT->footer();
-
