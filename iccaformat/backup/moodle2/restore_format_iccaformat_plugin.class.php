@@ -111,7 +111,6 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             'elementtype' => $elementtype,
             'optionname'  => $data->optionname,
             'optionvalue' => $data->optionvalue,
-            'timecreated' => time(),
             'timemodified' => time(),
         ]);
     }
@@ -162,7 +161,6 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             'elementtype' => 3,
             'optionname'  => $data->optionname,
             'optionvalue' => $data->optionvalue,
-            'timecreated' => time(),
             'timemodified' => time(),
         ]);
     }
@@ -244,16 +242,18 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
      * restored before the course's library images, so they still hold the
      * backup's old image ids. Run once everything is in:
      *   - an id the backup also contained is mapped to the restored copy;
-     *   - an id that exists on this site but wasn't in the backup (a site-wide
-     *     library image, or another course's) is left as it is;
-     *   - an id that doesn't exist on this site at all is cleared, so the card
-     *     falls back to its default instead of a broken image.
+     *   - an id that wasn't in the backup is kept only if the backup was made on
+     *     this site and the id is a site-wide library image;
+     *   - anything else (another course's image, or an id from another site, where
+     *     the same number can be an unrelated image) is cleared, so the card falls
+     *     back to its default.
      */
     private function remap_library_image_references(): void {
         global $DB;
 
         $courseid = $this->get_courseid();
-        $resolve  = function (int $oldid) use ($DB): int {
+        $samesite = $this->task->is_samesite();
+        $resolve  = function (int $oldid) use ($samesite): int {
             if ($oldid <= 0) {
                 return 0;
             }
@@ -261,7 +261,9 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             if ($newid) {
                 return $newid;
             }
-            return \local_iccaimagelib\library::get($oldid) ? $oldid : 0;
+            // Not in the backup: only a site-wide image on the same site is safe to keep.
+            return ($samesite && \format_iccaformat\local\format_option::is_allowed_library_image($oldid, 0))
+                ? $oldid : 0;
         };
 
         $rules = $DB->get_records_select(

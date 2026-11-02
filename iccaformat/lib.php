@@ -18,7 +18,7 @@
  * Main format class for format_iccaformat.
  *
  * @package   format_iccaformat
- * @copyright 2026 ICCA
+ * @copyright 2026 Inns of Court College of Advocacy (Part of COIC)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -314,7 +314,7 @@ class format_iccaformat extends core_courseformat\base {
                 ],
                 // Card corner rounding: 0 = square, 8 = medium, 16 = round, 24 = pill-like.
                 'borderradius' => [
-                    'default' => (int) (get_config('format_iccaformat', 'default_borderradius') ?: 8),
+                    'default' => self::config_default_int('default_borderradius', 8),
                     'type'    => PARAM_INT,
                 ],
                 // Card size preset — controls grid min/max widths.
@@ -341,7 +341,7 @@ class format_iccaformat extends core_courseformat\base {
                 ],
                 // Image zoom amount (percentage).
                 'hoverzoom' => [
-                    'default' => (int) (get_config('format_iccaformat', 'default_hoverzoom') ?: 105),
+                    'default' => self::config_default_int('default_hoverzoom', 105),
                     'type'    => PARAM_INT,
                 ],
                 // Shadow hover colour.
@@ -357,25 +357,25 @@ class format_iccaformat extends core_courseformat\base {
                 // Which card levels display a completion bar.
                 // 0 = sections only, 1 = subsections only, 2 = both.
                 'completionbarshowin' => [
-                    'default' => (int) (get_config('format_iccaformat', 'default_completionbarshowin') ?: 2),
+                    'default' => self::config_default_int('default_completionbarshowin', 2),
                     'type'    => PARAM_INT,
                 ],
                 'sectionprogbar' => [
-                    'default' => (int) (get_config('format_iccaformat', 'default_sectionprogbar') ?? 2),
+                    'default' => self::config_default_int('default_sectionprogbar', 2),
                     'type'    => PARAM_INT,
                 ],
                 'showactivitybar' => [
-                    'default' => (int) (get_config('format_iccaformat', 'default_showactivitybar') ?? 1),
+                    'default' => self::config_default_int('default_showactivitybar', 1),
                     'type'    => PARAM_INT,
                 ],
 
                 // Navigation.
                 'showhomebutton' => [
-                    'default' => (int) (get_config('format_iccaformat', 'default_showhomebutton') ?? 1),
+                    'default' => self::config_default_int('default_showhomebutton', 1),
                     'type'    => PARAM_INT,
                 ],
                 'showcoursemap' => [
-                    'default' => (int) (get_config('format_iccaformat', 'default_showcoursemap') ?? 1),
+                    'default' => self::config_default_int('default_showcoursemap', 1),
                     'type'    => PARAM_INT,
                 ],
                 'coursemaplabels' => [
@@ -1385,7 +1385,13 @@ window.addEventListener("load", function() {
         $imagesource = $dataarray['iccaformat_sec_imagesource'] ?? '';
         $imageid     = (int) ($dataarray['iccaformat_sec_imageid'] ?? 0);
 
-        if ($imagesource === 'library' && $imageid) {
+        // A library image must be a site image or one of this course's.
+        $imageallowed = !$imageid
+            || \format_iccaformat\local\format_option::is_allowed_library_image($imageid, $courseid);
+        if ($imagesource === 'library' && !$imageallowed) {
+            // Leave the card's image as it was.
+            \core\notification::error(get_string('cardimage_notallowed', 'format_iccaformat'));
+        } else if ($imagesource === 'library' && $imageid) {
             // Library image selected.
             \format_iccaformat\local\format_option::set($courseid, $etype, $sectionid,
                 \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'library');
@@ -1407,11 +1413,13 @@ window.addEventListener("load", function() {
                     $draftfile = reset($draftfiles);
                     $imgname = pathinfo($draftfile->get_filename(), PATHINFO_FILENAME);
                     // Save to the course library. A refusal (duplicate name, too large, no
-                    // permission) leaves the card unchanged, as before.
+                    // permission) leaves the card unchanged and tells the user why.
                     try {
                         $newlibid = \local_iccaimagelib\library::add_image_from_draft($draftitemid, $imgname, $context);
                     } catch (\moodle_exception $e) {
                         $newlibid = 0;
+                        $refused  = get_string('cardimage_refused', 'format_iccaformat', $e->getMessage());
+                        \core\notification::error($refused);
                     }
                     if ($newlibid) {
                         // Link card to library record.
@@ -2040,6 +2048,8 @@ function iccaPickerMode(mode) {
         }
     });
     if (srcHidden) srcHidden.value = mode;
+    var fpItem = document.getElementById("fitem_id_iccaformat_imagefile");
+    if (fpItem) fpItem.style.display = (mode === "upload") ? "" : "none";
     // If switching to library, deselect imageid unless one is selected.
     if (mode !== "library") {
         var idHidden = document.querySelector("input[name=\"iccaformat_imageid\"]");
@@ -2089,7 +2099,10 @@ window.addEventListener("load", function() {
         }
         document.getElementById("icca_btn_upload") && document.getElementById("icca_btn_upload").addEventListener("click", syncFp);
         document.getElementById("icca_btn_library") && document.getElementById("icca_btn_library").addEventListener("click", syncFp);
-        document.getElementById("icca_btn_none") && document.getElementById("icca_btn_none").addEventListener("click", syncFp);
+        ["icca_act_btn_none", "icca_act_btn_default"].forEach(function(id) {
+            var btn = document.getElementById(id);
+            if (btn) btn.addEventListener("click", syncFp);
+        });
     }, 300);
 });
 </script>';
@@ -2341,7 +2354,13 @@ function format_iccaformat_coursemodule_edit_post_actions($data, $course): stdCl
     $imagesource = $data->iccaformat_imagesource ?? '';
     $imageid     = (int) ($data->iccaformat_imageid ?? 0);
 
-    if ($imagesource === 'library' && $imageid) {
+    // A library image must be a site image or one of this course's.
+    $imageallowed = !$imageid
+        || \format_iccaformat\local\format_option::is_allowed_library_image($imageid, $courseid);
+    if ($imagesource === 'library' && !$imageallowed) {
+        // Leave the card's image as it was.
+        \core\notification::error(get_string('cardimage_notallowed', 'format_iccaformat'));
+    } else if ($imagesource === 'library' && $imageid) {
         \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
             \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'library');
         \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
@@ -2359,11 +2378,14 @@ function format_iccaformat_coursemodule_edit_post_actions($data, $course): stdCl
             if (!empty($draftfiles)) {
                 $draftfile = reset($draftfiles);
                 $imgname  = pathinfo($draftfile->get_filename(), PATHINFO_FILENAME);
-                // A refusal (duplicate name, too large, no permission) leaves the card unchanged, as before.
+                // A refusal (duplicate name, too large, no permission) leaves the card unchanged
+                // and tells the user why.
                 try {
                     $newlibid = \local_iccaimagelib\library::add_image_from_draft($draftitemid, $imgname, $context);
                 } catch (\moodle_exception $e) {
                     $newlibid = 0;
+                    $refused  = get_string('cardimage_refused', 'format_iccaformat', $e->getMessage());
+                    \core\notification::error($refused);
                 }
                 if ($newlibid) {
                     \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,

@@ -353,3 +353,9 @@ $string['labelrules_ui_js_applyto'] = 'Apply to {$a} rule(s)';
 $string['imagelibrary_ui_addtolib'] = 'Add to library';
 $string['imagelibrary_ui_addn'] = 'Add {$a} images to library';
 $string['imagelibrary_ui_nfiles'] = '{$a} files selected';
+
+// Card image and Card Styling Rules upload messages (0.5.2).
+$string['cardimage_notallowed'] = 'The card image was not changed: that image is not in the site library or this course\'s library.';
+$string['cardimage_refused'] = 'The card image was not added: {$a}';
+$string['labelrules_saved_imagerefused'] = 'Rule saved, but the image was not added: {$a}';
+$string['labelrules_uploadfailed'] = 'The image could not be uploaded. It may be larger than the server allows.';

@@ -24,7 +24,7 @@
  *   Course overrides:   /course/format/iccaformat/labelrules.php?courseid=X
  *
  * @package   format_iccaformat
- * @copyright 2026 ICCA
+ * @copyright 2026 Inns of Court College of Advocacy (Part of COIC)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -91,37 +91,35 @@ if ($action === 'save' && confirm_sesskey()) {
     $icon  = core_text::substr(trim($icon), 0, 100);
 
     // A chosen image must be one this page can offer: site-wide, or this course's library.
-    if ($libraryimageid) {
-        $allowedctx = [(int) context_system::instance()->id];
-        if ($scopeid !== 0) {
-            $allowedctx[] = (int) context_course::instance($scopeid)->id;
-        }
-        $img = \local_iccaimagelib\library::get($libraryimageid);
-        if (!$img || !in_array((int) $img->contextid, $allowedctx, true)) {
-            $libraryimageid = 0;
-        }
+    if ($libraryimageid && !\format_iccaformat\local\format_option::is_allowed_library_image($libraryimageid, $scopeid)) {
+        $libraryimageid = 0;
     }
 
-    // If a new image was uploaded, save it to the appropriate library first.
-    if (!empty($_FILES['rule_imageupload']['tmp_name']) && $_FILES['rule_imageupload']['error'] === UPLOAD_ERR_OK) {
-        $uploadname = optional_param('rule_imagename', '', PARAM_TEXT);
-        if (!$uploadname) {
-            $uploadname = clean_filename(pathinfo($_FILES['rule_imageupload']['name'], PATHINFO_FILENAME));
-            $uploadname = ucfirst(str_replace(['-', '_'], ' ', $uploadname));
-        }
-        // Route to all-courses library (contextid=1) for site rules, course library for course rules.
-        $uploadcontextid = $scopeid === 0
-            ? context_system::instance()->id
-            : context_course::instance($scopeid)->id;
-        $newid = \local_iccaimagelib\library::save_new_from_raw_upload(
-            $uploadname,
-            $_FILES['rule_imageupload']['tmp_name'],
-            $_FILES['rule_imageupload']['name'],
-            $uploadcontextid,
-            $USER->id
-        );
-        if ($newid) {
-            $libraryimageid = $newid;
+    // If a new image was uploaded, add it to the matching library first: the site library
+    // for site-wide rules, the course library for course rules. A refusal (duplicate name,
+    // wrong type, too large, no permission) is reported after the rest of the rule saves.
+    $uploaderror = '';
+    $upload = $_FILES['rule_imageupload'] ?? null;
+    if ($upload && (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        if ((int) $upload['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($upload['tmp_name'])) {
+            $uploaderror = get_string('labelrules_uploadfailed', 'format_iccaformat');
+        } else {
+            $uploadname = optional_param('rule_imagename', '', PARAM_TEXT);
+            if (!$uploadname) {
+                $uploadname = clean_filename(pathinfo($upload['name'], PATHINFO_FILENAME));
+                $uploadname = ucfirst(str_replace(['-', '_'], ' ', $uploadname));
+            }
+            $uploadcontext = $scopeid === 0 ? context_system::instance() : context_course::instance($scopeid);
+            try {
+                $libraryimageid = \local_iccaimagelib\library::add_image_from_path(
+                    $upload['tmp_name'],
+                    clean_filename($upload['name']),
+                    $uploadname,
+                    $uploadcontext
+                );
+            } catch (\moodle_exception $e) {
+                $uploaderror = $e->getMessage();
+            }
         }
     }
 
@@ -148,6 +146,14 @@ if ($action === 'save' && confirm_sesskey()) {
         $DB->insert_record('iccaformat_label_rules', $record);
     }
 
+    if ($uploaderror !== '') {
+        redirect(
+            $selfurl,
+            get_string('labelrules_saved_imagerefused', 'format_iccaformat', $uploaderror),
+            null,
+            \core\output\notification::NOTIFY_ERROR
+        );
+    }
     redirect($selfurl, get_string('labelrules_saved', 'format_iccaformat'),
         null, \core\output\notification::NOTIFY_SUCCESS);
 }

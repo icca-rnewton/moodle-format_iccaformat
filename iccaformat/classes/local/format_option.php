@@ -24,7 +24,7 @@
  * use get_from_cache() per element during rendering.
  *
  * @package   format_iccaformat
- * @copyright 2026 ICCA
+ * @copyright 2026 Inns of Court College of Advocacy (Part of COIC)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -191,6 +191,35 @@ class format_option {
         $DB->delete_records_select(self::TABLE,
             'courseid = ? AND elementid = ? AND optionname = ? AND ' . $typesql,
             array_merge([$courseid, $elementid, $optionname], $typeparams));
+    }
+
+    /**
+     * Is this library image one a card in this course may use?
+     *
+     * Allowed: a site-wide image, or one from this course's own library. Anything else
+     * (another course's image, a deleted or unknown id) is refused. Used by every path
+     * that stores an image id: both card forms, Card Styling Rules and restore.
+     *
+     * @param  int $imageid  Library image id.
+     * @param  int $courseid Course the card or rule belongs to (0 = site-wide rules).
+     * @return bool
+     */
+    public static function is_allowed_library_image(int $imageid, int $courseid): bool {
+        if ($imageid <= 0) {
+            return false;
+        }
+        $image = \local_iccaimagelib\library::get($imageid);
+        if (!$image) {
+            return false;
+        }
+        $allowed = [(int) \context_system::instance()->id];
+        if ($courseid > 0) {
+            $coursecontext = \context_course::instance($courseid, IGNORE_MISSING);
+            if ($coursecontext) {
+                $allowed[] = (int) $coursecontext->id;
+            }
+        }
+        return in_array((int) $image->contextid, $allowed, true);
     }
 
     /**

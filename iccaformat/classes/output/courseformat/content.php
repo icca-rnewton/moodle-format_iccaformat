@@ -671,7 +671,9 @@ class content extends content_base {
                             $bgcolour = \format_iccaformat\local\format_option::get_from_cache(
                                 $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sub->id, 'imagebackgroundcolour', $defaultbgcolour);
                             $data->othersections[] = [
-                                'name'             => $sub->name ?: get_string('section'),
+                                'name'             => ((string) $sub->name !== '')
+                                ? format_string($sub->name, true, ['context' => $context])
+                                : get_string('section'),
                                 'url'              => (new \moodle_url('/course/section.php', ['id' => $sub->id]))->out(false),
                                 'bgcolour'         => $bgcolour ?: $defaultbgcolour,
                                 'iscurrent'        => ($sub->id === $section->id),
@@ -783,7 +785,9 @@ class content extends content_base {
                         $bgcolour = \format_iccaformat\local\format_option::get_from_cache(
                             $optioncache, \format_iccaformat\local\format_option::ELEMENT_SECTION, $sub->id, 'imagebackgroundcolour', $defaultbgcolour);
                         $data->othersections[] = [
-                            'name'             => $sub->name ?: get_string('section'),
+                            'name'             => ((string) $sub->name !== '')
+                                ? format_string($sub->name, true, ['context' => $context])
+                                : get_string('section'),
                             'url'              => (new \moodle_url('/course/section.php', ['id' => $sub->id]))->out(false),
                             'bgcolour'         => $bgcolour ?: $defaultbgcolour,
                             'iscurrent'        => false,

@@ -18,7 +18,7 @@
  * Renderer for format_iccaformat.
  *
  * @package   format_iccaformat
- * @copyright 2026 ICCA
+ * @copyright 2026 Inns of Court College of Advocacy (Part of COIC)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
