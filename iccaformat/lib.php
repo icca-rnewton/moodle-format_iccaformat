@@ -97,8 +97,9 @@ class format_iccaformat extends core_courseformat\base {
     /**
      * Course deletion hook: remove this format's data for the course.
      *
-     * Per-card options, the course's Card Styling Rules, and its course-level image
-     * library (records and files). Site-wide rules and images are untouched.
+     * Per-card options, the course's Card Styling Rules, and its course image library
+     * (through local_iccaimagelib, which also does this itself on course deletion).
+     * Site-wide rules and images are untouched.
      *
      * @return void
      */
@@ -112,9 +113,8 @@ class format_iccaformat extends core_courseformat\base {
 
         $context = \context_course::instance($courseid, IGNORE_MISSING);
         if ($context) {
-            $ids = $DB->get_fieldset_select('iccaformat_image_library', 'id', 'contextid = ?', [$context->id]);
-            foreach ($ids as $id) {
-                \format_iccaformat\local\image_library::delete((int) $id);
+            foreach (\local_iccaimagelib\library::get_all_for_context((int) $context->id) as $image) {
+                \local_iccaimagelib\library::delete((int) $image->id);
             }
         }
     }
@@ -1001,10 +1001,10 @@ window.addEventListener("load", function() {
             }
         }
 
-        $libraryimages  = \format_iccaformat\local\image_library::get_all_for_course($courseid);
+        $libraryimages  = \local_iccaimagelib\library::get_all_for_course($courseid);
         $courseimages   = $libraryimages['course'];
         $siteimages     = $libraryimages['site'];
-        $libpageurl     = (new \moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]))->out(false);
+        $libpageurl     = (new \moodle_url('/local/iccaimagelib/index.php', ['courseid' => $courseid]))->out(false);
         $coursecontext  = \context_course::instance($courseid);
 
         // Header.
@@ -1021,9 +1021,9 @@ window.addEventListener("load", function() {
                 $previewurl = \moodle_url::make_pluginfile_url($coursecontext->id, 'format_iccaformat', 'element_image', $sectionid, '/', $ef->get_filename())->out(false);
             }
         } else if ($currentsource === 'library' && $currentimageid) {
-            $librecord = \format_iccaformat\local\image_library::get($currentimageid);
+            $librecord = \local_iccaimagelib\library::get($currentimageid);
             if ($librecord) {
-                $previewurl = \format_iccaformat\local\image_library::get_url($librecord);
+                $previewurl = \local_iccaimagelib\library::get_url($librecord);
             }
         }
         if ($previewurl) {
@@ -1036,7 +1036,8 @@ window.addEventListener("load", function() {
         $draftitemid = 0;
         if ($sectionid) {
             file_prepare_draft_area($draftitemid, $coursecontext->id, 'format_iccaformat',
-                'element_image', $sectionid, ['maxbytes' => 5 * 1024 * 1024, 'maxfiles' => 1]);
+                'element_image', $sectionid,
+                ['maxbytes' => \local_iccaimagelib\library::get_max_bytes(), 'maxfiles' => 1]);
         }
 
         $isnoimage  = ($currentsource === 'none');
@@ -1045,7 +1046,7 @@ window.addEventListener("load", function() {
         $islib      = !$isnoimage && !$isdefault && !$isupload;
 
         $thumbfn2 = function($img, $checked) {
-            $url    = \format_iccaformat\local\image_library::get_url($img);
+            $url    = \local_iccaimagelib\library::get_url($img);
             $border = $checked ? '2.5px solid #0d3c6f' : '1px solid #dee2e6';
             $tick   = $checked ? '<span style="position:absolute;top:4px;right:4px;background:#0d3c6f;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</span>' : '';
             $h  = '<div class="icca-picker-tile' . ($checked ? ' icca-picker-selected' : '') . '"'
@@ -1222,7 +1223,10 @@ window.addEventListener("load", function() {
         $mform->setType('iccaformat_sec_imageid', PARAM_INT);
         $elements[] = $mform->addElement('filepicker', 'iccaformat_sec_imagefile',
             get_string('card_image_source_upload', 'format_iccaformat'), null,
-            ['maxbytes' => 5 * 1024 * 1024, 'accepted_types' => ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg']]);
+            [
+                'maxbytes' => \local_iccaimagelib\library::get_max_bytes(),
+                'accepted_types' => \local_iccaimagelib\library::get_accepted_extensions(),
+            ]);
         $mform->setDefault('iccaformat_sec_imagefile', $draftitemid);
 
         // ── Filter and overlay swatch pickers ─────────────────────────────
@@ -1401,24 +1405,22 @@ window.addEventListener("load", function() {
 
                 if (!empty($draftfiles)) {
                     $draftfile = reset($draftfiles);
-                    $mimetype  = $draftfile->get_mimetype();
-                    $accepted  = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
-
-                    if (in_array($mimetype, $accepted)) {
-                        $imgname = pathinfo($draftfile->get_filename(), PATHINFO_FILENAME);
-                        // Save to course library via save_new().
-                        $newlibid = \format_iccaformat\local\image_library::save_new(
-                            $imgname, '', $draftitemid, $context->id, $USER->id
-                        );
-                        if ($newlibid) {
-                            // Link card to library record.
-                            \format_iccaformat\local\format_option::set($courseid, $etype, $sectionid,
-                                \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'library');
-                            \format_iccaformat\local\format_option::set($courseid, $etype, $sectionid,
-                                \format_iccaformat\local\format_option::OPT_IMAGE_ID, $newlibid);
-                            // Clean up any old element_image file.
-                            $fs->delete_area_files($context->id, 'format_iccaformat', 'element_image', $sectionid);
-                        }
+                    $imgname = pathinfo($draftfile->get_filename(), PATHINFO_FILENAME);
+                    // Save to the course library. A refusal (duplicate name, too large, no
+                    // permission) leaves the card unchanged, as before.
+                    try {
+                        $newlibid = \local_iccaimagelib\library::add_image_from_draft($draftitemid, $imgname, $context);
+                    } catch (\moodle_exception $e) {
+                        $newlibid = 0;
+                    }
+                    if ($newlibid) {
+                        // Link card to library record.
+                        \format_iccaformat\local\format_option::set($courseid, $etype, $sectionid,
+                            \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'library');
+                        \format_iccaformat\local\format_option::set($courseid, $etype, $sectionid,
+                            \format_iccaformat\local\format_option::OPT_IMAGE_ID, $newlibid);
+                        // Clean up any old element_image file.
+                        $fs->delete_area_files($context->id, 'format_iccaformat', 'element_image', $sectionid);
                     }
                 } else {
                     // No new file — preserve existing.
@@ -1641,9 +1643,7 @@ function iccaOvrSyncVal(valName, val) {
 /**
  * Serves files from format_iccaformat file areas.
  *
- * File areas handled:
- *   library_image  — images from iccaformat_image_library (system or course context).
- *                    Access: any logged-in user (images are decorative, not sensitive).
+ * File areas handled (library images are served by local_iccaimagelib):
  *   element_image  — direct-upload images for individual sections/subsections (itemid = section id).
  *   cm_image       — direct-upload images for individual activities (itemid = cmid).
  *                    Access: must be enrolled in the course (course context).
@@ -1658,26 +1658,6 @@ function iccaOvrSyncVal(valName, val) {
  * @return bool|void False if file not found, otherwise sends file and exits.
  */
 function format_iccaformat_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, array $options = []) {
-
-    // Library images: served to any logged-in user.
-    if ($filearea === 'library_image') {
-        require_login();
-
-        $itemid  = (int) array_shift($args);
-        $filename = array_pop($args);
-        $filepath = $args ? '/' . implode('/', $args) . '/' : '/';
-
-        $fs   = get_file_storage();
-        $file = $fs->get_file($context->id, 'format_iccaformat', 'library_image', $itemid, $filepath, $filename);
-
-        if (!$file || $file->is_directory()) {
-            return false;
-        }
-
-        // Images are not sensitive — cache aggressively, no forced download.
-        send_stored_file($file, 60 * 60 * 24 * 7, 0, false, $options);
-        return;
-    }
 
     // Element images (sections: element_image, activities: cm_image): served only to
     // users who can access the course.
@@ -1857,13 +1837,13 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
         \format_iccaformat\local\format_option::OPT_LABEL_ENABLED, null); // null = not set, inherit from rule
 
     // Load library images for picker — split into course and Format library.
-    $libraryimages = \format_iccaformat\local\image_library::get_all_for_course($courseid);
+    $libraryimages = \local_iccaimagelib\library::get_all_for_course($courseid);
     $courseimages  = $libraryimages['course'];
     $siteimages    = $libraryimages['site'];
     $allimages     = array_merge($courseimages, $siteimages);
     $syscontextid  = \context_system::instance()->id;
     $issiteadmin   = has_capability('moodle/site:config', \context_system::instance());
-    $libpageurl    = (new \moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]))->out(false);
+    $libpageurl    = (new \moodle_url('/local/iccaimagelib/index.php', ['courseid' => $courseid]))->out(false);
 
     // ── Header ────────────────────────────────────────────────────────────────
     $mform->addElement('header', 'iccaformat_card_header',
@@ -1886,9 +1866,9 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
                 )->out(false);
             }
         } else if ($currentsource === 'library' && $currentimageid) {
-            $librecord = \format_iccaformat\local\image_library::get($currentimageid);
+            $librecord = \local_iccaimagelib\library::get($currentimageid);
             if ($librecord) {
-                $previewurl = \format_iccaformat\local\image_library::get_url($librecord);
+                $previewurl = \local_iccaimagelib\library::get_url($librecord);
             }
         }
         if ($previewurl) {
@@ -1911,7 +1891,7 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
         file_prepare_draft_area($draftitemid,
             \context_course::instance($courseid)->id,
             'format_iccaformat', \format_iccaformat\local\format_option::FILEAREA_CM, $cmid,
-            ['maxbytes' => 5 * 1024 * 1024, 'maxfiles' => 1]
+            ['maxbytes' => \local_iccaimagelib\library::get_max_bytes(), 'maxfiles' => 1]
         );
     }
 
@@ -1924,7 +1904,7 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
 
     // Build tile HTML for a single library image.
     $thumbfn = function($img, $checked) {
-        $url    = \format_iccaformat\local\image_library::get_url($img);
+        $url    = \local_iccaimagelib\library::get_url($img);
         $border = $checked ? '2.5px solid #0d3c6f' : '1px solid #dee2e6';
         $tick   = $checked ? '<span style="position:absolute;top:4px;right:4px;background:#0d3c6f;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</span>' : '';
         $h  = '<div class="icca-picker-tile' . ($checked ? ' icca-picker-selected' : '') . '"'
@@ -1961,7 +1941,7 @@ function format_iccaformat_coursemodule_standard_elements($formwrapper, $mform):
         }
     }
 
-    $libpageurlstr = (new \moodle_url('/course/format/iccaformat/imagelibrary.php',
+    $libpageurlstr = (new \moodle_url('/local/iccaimagelib/index.php',
         ['courseid' => $courseid]))->out(false);
 
     $html  = '<div class="format-iccaformat-imgpicker" style="margin-bottom:0.5rem;">';
@@ -2122,8 +2102,8 @@ window.addEventListener("load", function() {
     $mform->setType('iccaformat_imageid', PARAM_INT);
     $mform->addElement('filepicker', 'iccaformat_imagefile',
         get_string('card_image_source_upload', 'format_iccaformat'), null, [
-            'maxbytes'       => 5 * 1024 * 1024,
-            'accepted_types' => ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'],
+            'maxbytes'       => \local_iccaimagelib\library::get_max_bytes(),
+            'accepted_types' => \local_iccaimagelib\library::get_accepted_extensions(),
         ]);
     $mform->setDefault('iccaformat_imagefile', $draftitemid);
 
@@ -2378,22 +2358,21 @@ function format_iccaformat_coursemodule_edit_post_actions($data, $course): stdCl
 
             if (!empty($draftfiles)) {
                 $draftfile = reset($draftfiles);
-                $mimetype  = $draftfile->get_mimetype();
-
-                if (in_array($mimetype, \format_iccaformat\local\image_library::ACCEPTED_TYPES)) {
-                    $imgname  = pathinfo($draftfile->get_filename(), PATHINFO_FILENAME);
-                    $newlibid = \format_iccaformat\local\image_library::save_new(
-                        $imgname, '', $draftitemid, $context->id, $USER->id
-                    );
-                    if ($newlibid) {
-                        \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
-                            \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'library');
-                        \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
-                            \format_iccaformat\local\format_option::OPT_IMAGE_ID, $newlibid);
-                        // Clean up any old direct-upload file for this activity.
-                        $fs->delete_area_files($context->id, 'format_iccaformat',
-                            \format_iccaformat\local\format_option::FILEAREA_CM, $cmid);
-                    }
+                $imgname  = pathinfo($draftfile->get_filename(), PATHINFO_FILENAME);
+                // A refusal (duplicate name, too large, no permission) leaves the card unchanged, as before.
+                try {
+                    $newlibid = \local_iccaimagelib\library::add_image_from_draft($draftitemid, $imgname, $context);
+                } catch (\moodle_exception $e) {
+                    $newlibid = 0;
+                }
+                if ($newlibid) {
+                    \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
+                        \format_iccaformat\local\format_option::OPT_IMAGE_SOURCE, 'library');
+                    \format_iccaformat\local\format_option::set($courseid, $etype, $cmid,
+                        \format_iccaformat\local\format_option::OPT_IMAGE_ID, $newlibid);
+                    // Clean up any old direct-upload file for this activity.
+                    $fs->delete_area_files($context->id, 'format_iccaformat',
+                        \format_iccaformat\local\format_option::FILEAREA_CM, $cmid);
                 }
             }
         }
@@ -2505,4 +2484,35 @@ function format_iccaformat_coursemodule_edit_post_actions($data, $course): stdCl
     }
 
     return $data;
+}
+
+/**
+ * How many places in this format use a library image: per-card images and Card Styling Rules.
+ *
+ * Called by local_iccaimagelib for its "in use" counts and delete warnings.
+ *
+ * @param int $imageid Library image id.
+ * @return int
+ */
+function format_iccaformat_iccaimagelib_count_usages(int $imageid): int {
+    global $DB;
+    $cards = $DB->count_records_sql(
+        'SELECT COUNT(1) FROM {iccaformat_element_options} WHERE optionname = :optionname AND '
+            . $DB->sql_compare_text('optionvalue', 20) . ' = ' . $DB->sql_compare_text(':optionvalue', 20),
+        ['optionname' => \format_iccaformat\local\format_option::OPT_IMAGE_ID, 'optionvalue' => (string) $imageid]);
+    $rules = $DB->count_records('iccaformat_label_rules', ['libraryimageid' => $imageid]);
+    return (int) $cards + (int) $rules;
+}
+
+/**
+ * Link newly imported bundled images to site-wide Card Styling Rules that have no image.
+ *
+ * Called by local_iccaimagelib after it imports its bundled images (from cron when that
+ * happens during an install). Safe to call more than once; never replaces a chosen image.
+ *
+ * @param array $map Rule key (e.g. 'quiz') => library image id.
+ * @return void
+ */
+function format_iccaformat_iccaimagelib_bundled_imported(array $map): void {
+    \format_iccaformat\local\defaults::link_images($map);
 }

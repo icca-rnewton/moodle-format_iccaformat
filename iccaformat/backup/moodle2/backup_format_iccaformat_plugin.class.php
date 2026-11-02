@@ -28,7 +28,6 @@ defined('MOODLE_INTERNAL') || die();
  * Backup plugin class for ICCA Format.
  */
 class backup_format_iccaformat_plugin extends backup_format_plugin {
-
     /**
      * Section-level backup — section element options and image files.
      */
@@ -110,10 +109,14 @@ class backup_format_iccaformat_plugin extends backup_format_plugin {
         ]);
         $labelrules->add_child($labelrule);
         $plugin->add_child($labelrules);
-        $labelrule->set_source_table('iccaformat_label_rules',
-            ['courseid' => backup::VAR_COURSEID]);
+        $labelrule->set_source_table(
+            'iccaformat_label_rules',
+            ['courseid' => backup::VAR_COURSEID]
+        );
 
-        // ── Course-scoped library images ───────────────────────────────────
+        // ── Course library images (local_iccaimagelib) ────────────────────
+        // Rows come from the library's API; files are annotated under the library's component.
+        // The element names are unchanged so older backups restore through the same paths.
         $libraryimages = new backup_nested_element('library_images');
         $libraryimage  = new backup_nested_element('library_image', ['id'], [
             'contextid', 'name', 'description', 'filename',
@@ -121,15 +124,10 @@ class backup_format_iccaformat_plugin extends backup_format_plugin {
         ]);
         $libraryimages->add_child($libraryimage);
         $plugin->add_child($libraryimages);
-        $libraryimage->set_source_sql(
-            'SELECT il.*
-               FROM {iccaformat_image_library} il
-               JOIN {context} ctx ON ctx.id = il.contextid
-              WHERE ctx.contextlevel = ' . CONTEXT_COURSE . '
-                AND ctx.instanceid = ?',
-            [backup::VAR_COURSEID]
+        $libraryimage->set_source_array(
+            \local_iccaimagelib\library::get_course_images((int) $this->task->get_courseid())
         );
-        $libraryimage->annotate_files('format_iccaformat', 'library_image', 'id');
+        $libraryimage->annotate_files(\local_iccaimagelib\library::COMPONENT, \local_iccaimagelib\library::FILEAREA, 'id');
 
         return $plugin;
     }

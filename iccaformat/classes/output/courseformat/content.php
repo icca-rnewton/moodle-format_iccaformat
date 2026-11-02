@@ -222,7 +222,7 @@ class content extends content_base {
             . '}'
             . '</style>';
         $data->canedit          = $canedit;
-        $data->imageliburl      = (new \moodle_url('/course/format/iccaformat/imagelibrary.php',
+        $data->imageliburl      = (new \moodle_url('/local/iccaimagelib/index.php',
             ['courseid' => $course->id]))->out(false);
         $data->labelrulesurl    = (new \moodle_url('/course/format/iccaformat/labelrules.php',
             ['courseid' => $course->id]))->out(false);
@@ -1523,47 +1523,39 @@ class content extends content_base {
         return $result;
     }
 
+    /**
+     * URL of a library image, or '' if it has been deleted.
+     *
+     * The site-wide and this course's libraries are loaded once per page, which covers
+     * almost every card; any other id (e.g. another course's image) is looked up once.
+     *
+     * @param int $imageid
+     * @return string
+     */
     private function library_image_url(int $imageid): string {
-        global $DB;
         if ($this->libimagecache === null) {
-            // Site-wide and this course's library in one query — covers almost every card.
-            $coursectx = \context_course::instance($this->format->get_courseid());
-            $this->libimagecache = $DB->get_records_select('iccaformat_image_library',
-                'contextid IN (?, ?)', [\context_system::instance()->id, $coursectx->id]);
+            $this->libimagecache = [];
+            $courseimages = \local_iccaimagelib\library::get_all_for_course((int) $this->format->get_courseid());
+            foreach (array_merge($courseimages['site'], $courseimages['course']) as $record) {
+                $this->libimagecache[(int) $record->id] = $record;
+            }
         }
         if (!array_key_exists($imageid, $this->libimagecache)) {
-            // An image from elsewhere (e.g. another course's library): look it up once.
-            $this->libimagecache[$imageid] = $DB->get_record('iccaformat_image_library', ['id' => $imageid]);
+            $this->libimagecache[$imageid] = \local_iccaimagelib\library::get($imageid);
         }
         $record = $this->libimagecache[$imageid];
-        if (!$record) {
-            return '';
-        }
-        $context = \context::instance_by_id($record->contextid);
-        return \moodle_url::make_pluginfile_url(
-            $context->id, 'format_iccaformat', 'library_image',
-            $imageid, '/', $record->filename
-        )->out(false);
+        return $record ? \local_iccaimagelib\library::get_url($record) : '';
     }
 
     /**
      * Static version of library_image_url for use outside class context
      * (e.g. labelrules.php).
+     *
+     * @param int $imageid
+     * @return string URL, or '' if the image does not exist.
      */
     public static function get_library_image_url_static(int $imageid): string {
-        global $DB;
-        if (!$imageid) {
-            return '';
-        }
-        $record = $DB->get_record('iccaformat_image_library', ['id' => $imageid]);
-        if (!$record) {
-            return '';
-        }
-        $context = \context::instance_by_id($record->contextid);
-        return \moodle_url::make_pluginfile_url(
-            $context->id, 'format_iccaformat', 'library_image',
-            $imageid, '/', $record->filename
-        )->out(false);
+        return \local_iccaimagelib\library::get_url_by_id($imageid);
     }
 
     /**

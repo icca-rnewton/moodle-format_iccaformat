@@ -267,7 +267,7 @@ if ($ADMIN->fulltree) {
         . '<a href="' . new moodle_url('/course/format/iccaformat/labelrules.php') . '">'
             . get_string('labelrules_site', 'format_iccaformat') . '</a>'
         . ' &middot; '
-        . '<a href="' . new moodle_url('/course/format/iccaformat/imagelibrary.php') . '">'
+        . '<a href="' . new moodle_url('/local/iccaimagelib/index.php') . '">'
             . get_string('formatlibrary_site', 'format_iccaformat') . '</a>'
     ));
 

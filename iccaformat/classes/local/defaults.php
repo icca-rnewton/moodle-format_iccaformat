@@ -15,12 +15,16 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Out-of-the-box defaults: site-wide Card Styling Rules and the bundled card images.
+ * Out-of-the-box defaults: the site-wide Card Styling Rules.
  *
- * The images in pix/cardimages/ (one SVG per rule key, e.g. quiz.svg) are copied into
- * the site-wide Card Image Library on first install and linked to the default rules,
- * so a new site has fully styled cards with no setup. After that the library copy is
- * what cards use; admins can rename, replace or delete it like any other image.
+ * The default images now belong to local_iccaimagelib, which imports them as site-wide
+ * library images, each marked with a bundle key matching a rule key (e.g. quiz). Rules are
+ * linked to those images in whichever of these happens first:
+ *   - this format's install, if the library is already installed;
+ *   - the library telling the format after it imports them
+ *     (format_iccaformat_iccaimagelib_bundled_imported() in lib.php);
+ *   - "Load defaults" on the site-wide Card Styling Rules page.
+ * Linking only ever fills rules that have no image; a chosen image is never replaced.
  *
  * @package   format_iccaformat
  * @copyright 2026 Inns of Court College of Advocacy (Part of COIC)
@@ -29,16 +33,10 @@
 
 namespace format_iccaformat\local;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
- * Default rules and bundled images.
+ * Default rules and links to the bundled images.
  */
 class defaults {
-
-    /** @var string Bundled images folder, relative to $CFG->dirroot. */
-    const IMAGEDIR = '/course/format/iccaformat/pix/cardimages';
-
     /**
      * Default site-level rules shipped with the format, keyed by modname
      * ("section" is the format's own key for top-level sections).
@@ -47,126 +45,79 @@ class defaults {
      */
     public static function rules(): array {
         return [
-            'quiz'         => ['label' => 'Assessment',  'icon' => 'fa-check-square-o'],
-            'subsection'   => ['label' => 'Subsection',  'icon' => 'fa-layer-group'],
-            'section'      => ['label' => 'Section',     'icon' => 'numeric'],
-            'assign'       => ['label' => 'Assignment',  'icon' => 'fa-pencil-square-o'],
-            'page'         => ['label' => 'Reading',     'icon' => 'fa-file-text-o'],
-            'url'          => ['label' => 'Link',        'icon' => 'fa-link'],
-            'resource'     => ['label' => 'File',        'icon' => 'fa-file-o'],
-            'forum'        => ['label' => 'Discussion',  'icon' => 'fa-comments-o'],
-            'scorm'        => ['label' => 'Course',      'icon' => 'fa-play-circle-o'],
+            'quiz'         => ['label' => 'Assessment', 'icon' => 'fa-check-square-o'],
+            'subsection'   => ['label' => 'Subsection', 'icon' => 'fa-layer-group'],
+            'section'      => ['label' => 'Section', 'icon' => 'numeric'],
+            'assign'       => ['label' => 'Assignment', 'icon' => 'fa-pencil-square-o'],
+            'page'         => ['label' => 'Reading', 'icon' => 'fa-file-text-o'],
+            'url'          => ['label' => 'Link', 'icon' => 'fa-link'],
+            'resource'     => ['label' => 'File', 'icon' => 'fa-file-o'],
+            'forum'        => ['label' => 'Discussion', 'icon' => 'fa-comments-o'],
+            'scorm'        => ['label' => 'Course', 'icon' => 'fa-play-circle-o'],
             'h5pactivity'  => ['label' => 'Interactive', 'icon' => 'fa-hand-pointer-o'],
-            'lesson'       => ['label' => 'Lesson',      'icon' => 'fa-graduation-cap'],
-            'workshop'     => ['label' => 'Workshop',    'icon' => 'fa-users'],
-            'choice'       => ['label' => 'Choice',      'icon' => 'fa-question-circle-o'],
-            'feedback'     => ['label' => 'Feedback',    'icon' => 'fa-comment-o'],
-            'glossary'     => ['label' => 'Glossary',    'icon' => 'fa-book'],
-            'book'         => ['label' => 'Guide',       'icon' => 'fa-book'],
-            'lti'          => ['label' => 'External',    'icon' => 'fa-external-link'],
-            'folder'       => ['label' => 'Folder',      'icon' => 'fa-folder-o'],
-            'wiki'         => ['label' => 'Wiki',        'icon' => 'fa-pencil'],
-            'data'         => ['label' => 'Database',    'icon' => 'fa-database'],
-            'dataform'     => ['label' => 'Data Form',   'icon' => 'fa-wpforms'],
-            'cpdrecord'    => ['label' => 'CPD Record',  'icon' => 'fa-cube'],
-            'groupmembers' => ['label' => 'Groups',      'icon' => 'fa-group'],
-            'chat'         => ['label' => 'Chat',        'icon' => 'fa-comments'],
-            'booking'      => ['label' => 'Booking',     'icon' => 'fa-calendar-check-o'],
-            'pulse'        => ['label' => 'Reminder',    'icon' => 'fa-bell-o'],
+            'lesson'       => ['label' => 'Lesson', 'icon' => 'fa-graduation-cap'],
+            'workshop'     => ['label' => 'Workshop', 'icon' => 'fa-users'],
+            'choice'       => ['label' => 'Choice', 'icon' => 'fa-question-circle-o'],
+            'feedback'     => ['label' => 'Feedback', 'icon' => 'fa-comment-o'],
+            'glossary'     => ['label' => 'Glossary', 'icon' => 'fa-book'],
+            'book'         => ['label' => 'Guide', 'icon' => 'fa-book'],
+            'lti'          => ['label' => 'External', 'icon' => 'fa-external-link'],
+            'folder'       => ['label' => 'Folder', 'icon' => 'fa-folder-o'],
+            'wiki'         => ['label' => 'Wiki', 'icon' => 'fa-pencil'],
+            'data'         => ['label' => 'Database', 'icon' => 'fa-database'],
+            'dataform'     => ['label' => 'Data Form', 'icon' => 'fa-wpforms'],
+            'cpdrecord'    => ['label' => 'CPD Record', 'icon' => 'fa-cube'],
+            'groupmembers' => ['label' => 'Groups', 'icon' => 'fa-group'],
+            'chat'         => ['label' => 'Chat', 'icon' => 'fa-comments'],
+            'booking'      => ['label' => 'Booking', 'icon' => 'fa-calendar-check-o'],
+            'pulse'        => ['label' => 'Reminder', 'icon' => 'fa-bell-o'],
         ];
     }
 
     /**
-     * First-install setup: import the bundled images and create the default rules
-     * with those images linked. Called from db/install.php.
+     * First-install setup: create the default rules, linking the bundled images if the
+     * library has already imported them. Called from db/install.php.
      *
      * @return void
      */
     public static function install(): void {
-        self::seed_rules(self::import_bundled_images());
+        self::seed_rules(self::bundled_images());
     }
 
     /**
-     * Library name for a bundled image, e.g. "Assessment (default)".
+     * Bundled images in the library, or none if the library is not installed yet.
      *
-     * @param  string $key Rule key / file name without extension.
-     * @return string
-     */
-    public static function image_name(string $key): string {
-        $rules = self::rules();
-        $label = $rules[$key]['label'] ?? $key;
-        return get_string('bundledimage_name', 'format_iccaformat', $label);
-    }
-
-    /**
-     * Copy every bundled image into the site-wide library, skipping any whose
-     * library name already exists. Safe to call more than once.
+     * When both plugins are installed in one upgrade, this format installs first (Moodle
+     * installs format plugins before local ones), so the library table may not exist yet.
      *
-     * @return array key => library image id (new or existing).
+     * @return array rule key => library image id.
      */
-    public static function import_bundled_images(): array {
-        global $CFG, $DB;
-
-        $dir = $CFG->dirroot . self::IMAGEDIR;
-        $files = is_dir($dir) ? glob($dir . '/*.svg') : [];
-        if (!$files) {
+    public static function bundled_images(): array {
+        global $DB;
+        if (!$DB->get_manager()->table_exists(\local_iccaimagelib\library::TABLE)) {
             return [];
         }
-
-        $syscontext = \context_system::instance();
-        $existing   = self::find_bundled_images();
-        $admin      = get_admin();
-        $userid     = $admin ? (int) $admin->id : 0;
-        $fs         = get_file_storage();
-        $ids        = [];
-
-        foreach ($files as $path) {
-            $key = basename($path, '.svg');
-            if (isset($existing[$key])) {
-                $ids[$key] = $existing[$key];
-                continue;
-            }
-            $now = time();
-            $imageid = (int) $DB->insert_record(image_library::TABLE, (object) [
-                'contextid'    => $syscontext->id,
-                'name'         => self::image_name($key),
-                'description'  => '',
-                'filename'     => $key . '.svg',
-                'userid'       => $userid,
-                'timecreated'  => $now,
-                'timemodified' => $now,
-            ]);
-            $fs->create_file_from_string([
-                'contextid' => $syscontext->id,
-                'component' => image_library::COMPONENT,
-                'filearea'  => image_library::FILEAREA,
-                'itemid'    => $imageid,
-                'filepath'  => '/',
-                'filename'  => $key . '.svg',
-            ], image_library::sanitise_svg((string) file_get_contents($path)));
-            $ids[$key] = $imageid;
-        }
-        return $ids;
+        return \local_iccaimagelib\library::get_bundled_images();
     }
 
     /**
-     * Bundled images already present in the site-wide library, matched by name.
+     * Link bundled images to site-wide rules that have no image. Never replaces a chosen
+     * image and never creates rules. Safe to call more than once.
      *
-     * @return array key => library image id.
+     * @param array $imageids rule key => library image id.
+     * @return int Number of rules linked.
      */
-    public static function find_bundled_images(): array {
+    public static function link_images(array $imageids): int {
         global $DB;
-        $syscontextid = \context_system::instance()->id;
-        $ids = [];
-        foreach (array_keys(self::rules()) as $key) {
-            $id = $DB->get_field_select(image_library::TABLE, 'id',
-                'contextid = ? AND ' . $DB->sql_compare_text('name') . ' = ' . $DB->sql_compare_text('?'),
-                [$syscontextid, self::image_name($key)], IGNORE_MULTIPLE);
-            if ($id) {
-                $ids[$key] = (int) $id;
+        $linked = 0;
+        foreach ($imageids as $modname => $imageid) {
+            $rule = $DB->get_record('iccaformat_label_rules', ['courseid' => 0, 'modname' => (string) $modname]);
+            if ($rule && empty($rule->libraryimageid) && (int) $imageid > 0) {
+                $DB->set_field('iccaformat_label_rules', 'libraryimageid', (int) $imageid, ['id' => $rule->id]);
+                $linked++;
             }
         }
-        return $ids;
+        return $linked;
     }
 
     /**
@@ -175,7 +126,7 @@ class defaults {
      *
      * Rules are only created for modules installed on this site (plus "section").
      *
-     * @param  array $imageids key => library image id, from import/find above.
+     * @param  array $imageids key => library image id, from bundled_images().
      * @return void
      */
     public static function seed_rules(array $imageids): void {

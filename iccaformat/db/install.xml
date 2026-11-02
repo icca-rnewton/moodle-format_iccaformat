@@ -1,46 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="course/format/iccaformat/db" VERSION="20261021" COMMENT="XMLDB file for format_iccaformat"
+<XMLDB PATH="course/format/iccaformat/db" VERSION="20261102" COMMENT="XMLDB file for format_iccaformat"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../../lib/xmldb/xmldb.xsd"
 >
   <TABLES>
-
-    <!--
-      iccaformat_image_library
-      Site-wide (and optionally course-scoped) image repository.
-      contextid = 1 (system context) for site-wide images.
-      contextid = course context id for course-specific images.
-      Files stored in Moodle file API:
-        component = format_iccaformat
-        filearea  = library_image
-        contextid = this record's contextid
-        itemid    = this record's id
-    -->
-    <TABLE NAME="iccaformat_image_library" COMMENT="Site-wide and course-level image library for format_iccaformat cards.">
-      <FIELDS>
-        <FIELD NAME="id"          TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
-        <FIELD NAME="contextid"   TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"
-               COMMENT="System context (1) for site-wide images; course context id for course-scoped images."/>
-        <FIELD NAME="name"        TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"
-               COMMENT="Human-readable display name shown in the image picker."/>
-        <FIELD NAME="description" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="filename"    TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"
-               COMMENT="Stored filename in the Moodle file API (component=format_iccaformat, filearea=library_image)."/>
-        <FIELD NAME="userid"      TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"
-               COMMENT="User who uploaded the image."/>
-        <FIELD NAME="timecreated" TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
-        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary"      TYPE="primary" FIELDS="id"/>
-        <KEY NAME="fk_contextid" TYPE="foreign" FIELDS="contextid" REFTABLE="context" REFFIELDS="id"/>
-        <KEY NAME="fk_userid"    TYPE="foreign" FIELDS="userid"    REFTABLE="user"    REFFIELDS="id"/>
-      </KEYS>
-      <INDEXES>
-        <INDEX NAME="contextid" UNIQUE="false" FIELDS="contextid"
-               COMMENT="Fast lookup of all images available in a given context (site-wide or course)."/>
-      </INDEXES>
-    </TABLE>
 
     <!--
       iccaformat_element_options
@@ -50,7 +13,7 @@
 
       Known optionname values:
         imagesource        — 'library' or 'upload'
-        imageid            — int: iccaformat_image_library.id  (when imagesource=library)
+        imageid            — int: local_iccaimagelib.id  (when imagesource=library)
         description_display — 'inbox' | 'belowbox' | 'hidden'
         label_override     — string (cm only): overrides course label rule and module name
         icon_override      — string (cm only): FA class, e.g. 'fa-question-circle'
@@ -122,7 +85,7 @@
       <KEYS>
         <KEY NAME="primary"            TYPE="primary" FIELDS="id"/>
         <KEY NAME="fk_course"          TYPE="foreign" FIELDS="courseid"       REFTABLE="course"                    REFFIELDS="id"/>
-        <KEY NAME="fk_libraryimageid"  TYPE="foreign" FIELDS="libraryimageid" REFTABLE="iccaformat_image_library"  REFFIELDS="id"/>
+        <KEY NAME="fk_libraryimageid"  TYPE="foreign" FIELDS="libraryimageid" REFTABLE="local_iccaimagelib"        REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
         <!--

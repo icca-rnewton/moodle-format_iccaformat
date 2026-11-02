@@ -28,7 +28,6 @@ defined('MOODLE_INTERNAL') || die();
  * Restore plugin class for ICCA Format.
  */
 class restore_format_iccaformat_plugin extends restore_format_plugin {
-
     /**
      * Section-level restore paths.
      */
@@ -93,9 +92,13 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             return;
         }
 
-        if ($DB->record_exists_select('iccaformat_element_options',
+        if (
+            $DB->record_exists_select(
+                'iccaformat_element_options',
                 'courseid = ? AND elementid = ? AND optionname = ? AND elementtype IN (1, 2)',
-                [$courseid, $newsectionid, $data->optionname])) {
+                [$courseid, $newsectionid, $data->optionname]
+            )
+        ) {
             return;
         }
 
@@ -142,12 +145,14 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             $this->set_mapping('iccaformat_legacycmfiles', 1, 1);
         }
 
-        if ($DB->record_exists('iccaformat_element_options', [
+        if (
+            $DB->record_exists('iccaformat_element_options', [
             'courseid'    => $courseid,
             'elementtype' => 3,
             'elementid'   => $newcmid,
             'optionname'  => $data->optionname,
-        ])) {
+            ])
+        ) {
             return;
         }
 
@@ -171,10 +176,12 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
         $data           = (object) $data;
         $data->courseid = $this->task->get_courseid();
 
-        if ($DB->record_exists('iccaformat_label_rules', [
+        if (
+            $DB->record_exists('iccaformat_label_rules', [
             'courseid' => $data->courseid,
             'modname'  => $data->modname,
-        ])) {
+            ])
+        ) {
             return;
         }
 
@@ -184,25 +191,15 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
     }
 
     /**
-     * Restore library image record.
+     * Restore a course library image record into local_iccaimagelib.
+     *
+     * @param array $data
      */
     public function process_iccaformat_library_image($data) {
-        global $DB;
-
-        $data   = (object) $data;
-        $oldid  = $data->id;
-
-        $data->contextid    = \context_course::instance($this->task->get_courseid())->id;
-        $data->timecreated  = time();
-        $data->timemodified = time();
-
-        if (!$DB->record_exists('user', ['id' => $data->userid])) {
-            $data->userid = $this->task->get_userid();
-        }
-
-        unset($data->id);
-        $newid = $DB->insert_record('iccaformat_image_library', $data);
-        $this->set_mapping('iccaformat_library_image', $oldid, $newid, true);
+        $data      = (object) $data;
+        $contextid = (int) \context_course::instance($this->task->get_courseid())->id;
+        $newid     = \local_iccaimagelib\library::restore_record($data, $contextid, (int) $this->task->get_userid());
+        $this->set_mapping('iccaformat_library_image', $data->id, $newid, true);
     }
 
     /**
@@ -227,7 +224,15 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             \format_iccaformat\local\format_option::migrate_legacy_cm_files($this->get_courseid());
         }
 
+        // Library image files. Backups made before the library moved to local_iccaimagelib hold
+        // them under format_iccaformat/library_image: restore those too, then hand them over.
+        $this->add_related_files(
+            \local_iccaimagelib\library::COMPONENT,
+            \local_iccaimagelib\library::FILEAREA,
+            'iccaformat_library_image'
+        );
         $this->add_related_files('format_iccaformat', 'library_image', 'iccaformat_library_image');
+        \local_iccaimagelib\library::adopt_legacy_files((int) \context_course::instance($this->get_courseid())->id);
 
         $this->remap_library_image_references();
     }
@@ -256,11 +261,16 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             if ($newid) {
                 return $newid;
             }
-            return $DB->record_exists('iccaformat_image_library', ['id' => $oldid]) ? $oldid : 0;
+            return \local_iccaimagelib\library::get($oldid) ? $oldid : 0;
         };
 
-        $rules = $DB->get_records_select('iccaformat_label_rules',
-            'courseid = ? AND libraryimageid > 0', [$courseid], '', 'id, libraryimageid');
+        $rules = $DB->get_records_select(
+            'iccaformat_label_rules',
+            'courseid = ? AND libraryimageid > 0',
+            [$courseid],
+            '',
+            'id, libraryimageid'
+        );
         foreach ($rules as $rule) {
             $newid = $resolve((int) $rule->libraryimageid);
             if ($newid !== (int) $rule->libraryimageid) {
@@ -268,8 +278,13 @@ class restore_format_iccaformat_plugin extends restore_format_plugin {
             }
         }
 
-        $options = $DB->get_records_select('iccaformat_element_options',
-            'courseid = ? AND optionname = ?', [$courseid, 'imageid'], '', 'id, optionvalue');
+        $options = $DB->get_records_select(
+            'iccaformat_element_options',
+            'courseid = ? AND optionname = ?',
+            [$courseid, 'imageid'],
+            '',
+            'id, optionvalue'
+        );
         foreach ($options as $option) {
             $oldid = (int) $option->optionvalue;
             $newid = $resolve($oldid);

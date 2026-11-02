@@ -96,7 +96,7 @@ if ($action === 'save' && confirm_sesskey()) {
         if ($scopeid !== 0) {
             $allowedctx[] = (int) context_course::instance($scopeid)->id;
         }
-        $img = \format_iccaformat\local\image_library::get($libraryimageid);
+        $img = \local_iccaimagelib\library::get($libraryimageid);
         if (!$img || !in_array((int) $img->contextid, $allowedctx, true)) {
             $libraryimageid = 0;
         }
@@ -113,7 +113,7 @@ if ($action === 'save' && confirm_sesskey()) {
         $uploadcontextid = $scopeid === 0
             ? context_system::instance()->id
             : context_course::instance($scopeid)->id;
-        $newid = \format_iccaformat\local\image_library::save_new_from_raw_upload(
+        $newid = \local_iccaimagelib\library::save_new_from_raw_upload(
             $uploadname,
             $_FILES['rule_imageupload']['tmp_name'],
             $_FILES['rule_imageupload']['name'],
@@ -263,7 +263,7 @@ if ($action === 'seedefaults' && $issiteadmin && $scopeid === 0 && confirm_sessk
     // Creates any missing default rules, and links bundled images to rules without
     // an image — only where those images are already in the site library (they are
     // added on first install). Existing rules are otherwise left exactly as they are.
-    \format_iccaformat\local\defaults::seed_rules(\format_iccaformat\local\defaults::find_bundled_images());
+    \format_iccaformat\local\defaults::seed_rules(\format_iccaformat\local\defaults::bundled_images());
     redirect($selfurl, get_string('labelrules_defaults_loaded', 'format_iccaformat'),
         null, \core\output\notification::NOTIFY_SUCCESS);
 }
@@ -402,7 +402,7 @@ if ($scopeid === 0) {
         . $seedlabel . '</button>';
     echo '<div style="width:1px;height:28px;background:#dee2e6;margin:0 4px;"></div>';
     echo html_writer::link(
-        new moodle_url('/course/format/iccaformat/imagelibrary.php'),
+        new moodle_url('/local/iccaimagelib/index.php'),
         get_string('formatlibrary_site', 'format_iccaformat'),
         ['class' => 'btn btn-secondary']
     );
@@ -452,7 +452,7 @@ if ($scopeid === 0) {
     // Course scope — link to course image library + reset dialog button.
     echo '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:1.5rem;">';
     echo html_writer::link(
-        new moodle_url('/course/format/iccaformat/imagelibrary.php', ['courseid' => $courseid]),
+        new moodle_url('/local/iccaimagelib/index.php', ['courseid' => $courseid]),
         get_string('formatlibrary_course', 'format_iccaformat'),
         ['class' => 'btn btn-secondary']
     );
@@ -526,14 +526,11 @@ $imagehiddenchecked = ($editrule && !empty($editrule->image_hidden)) ? 'checked'
 $currentimgid = $editrule ? (int)($editrule->libraryimageid ?? 0) : 0;
 $formurl = new moodle_url($selfurl, ['action' => 'save', 'sesskey' => sesskey()]);
 
-$libimages = $DB->get_records_sql(
-    'SELECT il.* FROM {iccaformat_image_library} il
-      JOIN {context} ctx ON ctx.id = il.contextid
-     WHERE ctx.contextlevel = ' . CONTEXT_SYSTEM . '
-        OR (ctx.contextlevel = ' . CONTEXT_COURSE . ' AND ctx.instanceid = :courseid)
-     ORDER BY il.name',
-    ['courseid' => $course ? $course->id : 0]
-);
+// Images this page can offer: site-wide, plus this course's library on a course page.
+$libimages = $course
+    ? array_merge(...array_values(\local_iccaimagelib\library::get_all_for_course((int) $course->id)))
+    : \local_iccaimagelib\library::get_site_images();
+core_collator::asort_objects_by_property($libimages, 'name', core_collator::SORT_NATURAL);
 
 $allmodssorted = $allmodnames;
 sort($allmodssorted);
